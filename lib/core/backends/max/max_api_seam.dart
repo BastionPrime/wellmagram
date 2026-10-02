@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 
 import 'package:wellmagram/core/accounts/account_key.dart';
+import 'package:wellmagram/core/app/tls_gate.dart';
 
 /// Raw MAX packet as delivered by the kolibri push stream (opcode + JSON map).
 class MaxPushPacket {
@@ -237,17 +238,21 @@ class SessionSpecBuilder {
     required this.loadProxyUrl,
   });
 
+  /// Builds the session spec, then applies the TLS release gate (plan T-5.2 /
+  /// invariant S6): `insecureTls` survives only when the build allows it
+  /// (debug semantics); release builds compile the allowance out, so the
+  /// gate statically forces `insecureTls == false` here.
   Future<SessionSpec> build(AccountKey account) async {
     final endpoint = await loadEndpoint();
     final spoof = await loadSpoofProfile(account) ?? const {};
     final proxy = await loadProxyUrl();
-    return SessionSpec.fromMap({
+    return applyTlsReleaseGate(SessionSpec.fromMap({
       ...spoof,
       'host': endpoint.host,
       'port': endpoint.port,
       'proxy': proxy,
       'pingInteractive': true,
       'autoReconnect': false,
-    });
+    }));
   }
 }
