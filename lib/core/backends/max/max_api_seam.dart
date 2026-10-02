@@ -168,23 +168,40 @@ class SessionSpec {
   static const String defaultHost = 'api2.oneme.ru';
   static const int defaultPort = 443;
 
+  /// Reads a key in either style: camelCase (kolibri SessionOptions) or
+  /// snake_case (upstream getSpoofedSessionData / SpoofProfile.toJson).
+  /// SessionSpecBuilder merges the spoof bridge's snake_case map on top of
+  /// the config keys, so both spellings must resolve — the camelCase value
+  /// wins when both are present (it is the local config, not the spoof).
+  static T? _key<T>(Map<String, dynamic> map, String camel) =>
+      map.containsKey(camel)
+          ? map[camel] as T?
+          : map[_snake(camel)] as T?;
+
+  static String _snake(String camel) => camel
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (m) => '${m[1]}_${m[2]}',
+      )
+      .toLowerCase();
+
   factory SessionSpec.fromMap(Map<String, dynamic> map) => SessionSpec(
         host: map['host'] as String? ?? defaultHost,
         port: map['port'] as int? ?? defaultPort,
-        deviceId: map['deviceId'] as String? ?? '',
-        instanceId: map['instanceId'] as String? ?? '',
-        appVersion: map['appVersion'] as String? ?? '',
-        buildNumber: map['buildNumber'] as int? ?? 0,
-        deviceType: map['deviceType'] as String? ?? 'ANDROID',
-        osVersion: map['osVersion'] as String? ?? '',
-        timezone: map['timezone'] as String? ?? '',
-        screen: map['screen'] as String? ?? '',
-        pushDeviceType: map['pushDeviceType'] as String? ?? 'GCM',
-        arch: map['arch'] as String? ?? 'arm64-v8a',
-        locale: map['locale'] as String? ?? 'ru',
-        deviceName: map['deviceName'] as String? ?? '',
-        deviceLocale: map['deviceLocale'] as String? ?? 'ru',
-        clientSessionId: map['clientSessionId'] as int? ?? 0,
+        deviceId: _key<String>(map, 'deviceId') ?? '',
+        instanceId: _key<String>(map, 'instanceId') ?? '',
+        appVersion: _key<String>(map, 'appVersion') ?? '',
+        buildNumber: _key<int>(map, 'buildNumber') ?? 0,
+        deviceType: _key<String>(map, 'deviceType') ?? 'ANDROID',
+        osVersion: _key<String>(map, 'osVersion') ?? '',
+        timezone: _key<String>(map, 'timezone') ?? '',
+        screen: _key<String>(map, 'screen') ?? '',
+        pushDeviceType: _key<String>(map, 'pushDeviceType') ?? 'GCM',
+        arch: _key<String>(map, 'arch') ?? 'arm64-v8a',
+        locale: _key<String>(map, 'locale') ?? 'ru',
+        deviceName: _key<String>(map, 'deviceName') ?? '',
+        deviceLocale: _key<String>(map, 'deviceLocale') ?? 'ru',
+        clientSessionId: _key<int>(map, 'clientSessionId') ?? 0,
         pingIntervalSecs: map['pingIntervalSecs'] as int? ?? 30,
         pingInteractive: map['pingInteractive'] as bool? ?? true,
         autoReconnect: map['autoReconnect'] as bool? ?? false,
