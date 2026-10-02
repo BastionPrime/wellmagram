@@ -50,7 +50,7 @@ names and TLS ClientHello SNI, never payload data.
     tools/net_audit.sh --flavor foss trace.pcap
 
     # live capture + audit in one step (needs root):
-    sudo tools/net_audit.sh --live wlan0 --seconds 120 --report
+    sudo tools/net_audit.sh --live <iface> --seconds 120 --report
 
 Exit codes: `0` — every observed host is whitelisted; `1` — at least one
 host outside the whitelist; `2` — usage/dependency error (missing tshark,
