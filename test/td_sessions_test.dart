@@ -1,5 +1,7 @@
 library;
 
+import 'dart:async';
+
 import 'package:wellmagram/core/accounts/account_key.dart';
 import 'package:wellmagram/core/accounts/account_profile.dart';
 import 'package:wellmagram/core/accounts/account_registry.dart';
@@ -172,7 +174,7 @@ void main() {
     });
 
     test('corrupt persisted entry falls back to off', () async {
-      ghostPrefs.setString('tg_ghost:1', 'not-json{');
+      unawaited(ghostPrefs.setString('tg_ghost:1', 'not-json{'));
       final m = manager();
       expect(await m.ghostProfileOf(tgA), equals(TdGhostSettings.off));
     });

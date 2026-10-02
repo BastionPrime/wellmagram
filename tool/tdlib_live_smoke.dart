@@ -3,7 +3,11 @@
 // поднимает клиент, ждёт в receive-цикле updateAuthorizationState
 // (authorizationStateWaitTdlibParameters), шлёт close, уничтожает клиент.
 // Контракт = шов TdClientLike (create/send/receive/execute/destroy).
+// CLI tool: stdout output is the interface (CI image greps SMOKE RESULT),
+// so `print` here is intentional — avoid_print is suppressed per-file.
 import 'dart:convert';
+
+// ignore_for_file: avoid_print
 import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
@@ -71,7 +75,7 @@ void main() {
                 'cold start to first auth update: ${sw.elapsedMilliseconds} ms');
             break;
           }
-        } catch (_) {}
+        } on FormatException catch (_) {}
       }
     }
   }

@@ -40,7 +40,7 @@ class TdDatabaseKeyStore {
     final hex = await credentials.readToken(account);
     if (hex == null) return null;
     final bytes = _hexDecode(hex);
-    return bytes == null ? null : bytes;
+    return bytes;
   }
 
   /// Reads the stored key or creates and persists a new one. The first

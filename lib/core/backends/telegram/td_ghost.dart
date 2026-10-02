@@ -15,7 +15,7 @@
 /// tools/td_schema_check.py:
 /// - setOption name:string value:OptionValue = Ok;          (15662)
 /// - optionValueBoolean value:Bool = OptionValue;            (8889)
-/// - viewMessages chat_id:int53 message_ids:vector<int53>
+/// - `viewMessages chat_id:int53 message_ids:vector<int53>`
 ///   source:MessageSource force_read:Bool = Ok;              (13230)
 /// - openChat chat_id:int53 = Ok;                            (13219)
 /// - sendChatAction chat_id:int53 topic_id:MessageTopic

@@ -8,7 +8,7 @@
 ///   form; the channel choice (FCM / webpush / simplepush / …) is ADR-0002
 ///   territory and is injected by the caller, never hardcoded here.
 /// - [TdPush.register] — `registerDevice device_token:DeviceToken
-///   other_user_ids:vector<int53> = PushReceiverId` (td_api.tl:15602):
+///   `other_user_ids:vector<int53>` = `PushReceiverId` (td_api.tl:15602):
 ///   every live TG client registers the SAME token listing the other
 ///   accounts' user ids (мультиаккаунт-семантика плана 4.4 «общий токен
 ///   регистрируется каждым клиентом с other_user_ids»).

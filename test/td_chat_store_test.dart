@@ -28,7 +28,7 @@ Map<String, dynamic> chatJson({
       'last_read_outbox_message_id': 0,
       'unread_mention_count': 0,
       'positions': const [],
-      if (lastMessage != null) 'last_message': lastMessage,
+      'last_message': ?lastMessage,
     };
 
 Map<String, dynamic> messageJson({

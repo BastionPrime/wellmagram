@@ -85,7 +85,7 @@ void main() {
       () {
     final events = <Object>[];
     final order = <String>[];
-    final receive = (double _) {
+    Pointer<Utf8>? receive(double _) {
       order.add('receive');
       // One payload, then nulls — the stop flag ends the loop.
       if (order.where((e) => e == 'receive').length == 1) {
@@ -93,7 +93,7 @@ void main() {
         return '{"@type":"updateOption","name":"v"}'.toNativeUtf8();
       }
       return null;
-    };
+    }
     final stopFlag = calloc<Uint8>();
     stopFlag.value = 1; // armed before the loop even starts
     final loop = TdFfiClient.runReceiveLoopForTesting(
@@ -114,14 +114,14 @@ void main() {
       'without the stop flag, destroy still last', () {
     final order = <String>[];
     String? terminalPayload;
-    final receive = (double _) {
+    Pointer<Utf8>? receive(double _) {
       if (terminalPayload == null) {
         terminalPayload =
             '{"@type":"updateAuthorizationState","authorization_state":{"@type":"authorizationStateClosed"}}';
         return terminalPayload!.toNativeUtf8();
       }
       return null;
-    };
+    }
     final stopFlag = calloc<Uint8>();
     stopFlag.value = 0; // never armed — the terminal update must suffice
     final forwarded = <Object>[];
@@ -139,7 +139,7 @@ void main() {
   test('a message text containing the terminal literal is not terminal', () {
     final order = <String>[];
     var calls = 0;
-    final receive = (double _) {
+    Pointer<Utf8>? receive(double _) {
       calls++;
       if (calls == 1) {
         // Text mentions the state name but is a chat title, not the update.
@@ -150,7 +150,7 @@ void main() {
       // after, so exactly two receive calls prove the literal alone did
       // NOT terminate the loop (a terminal-payload exit would give 1).
       return null;
-    };
+    }
     final stopFlag = calloc<Uint8>();
     stopFlag.value = 1;
     final forwarded = <Object>[];

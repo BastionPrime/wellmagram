@@ -1,2 +1,12 @@
-# Baseline: analyzer default rules; flutter_lints arrives with the Flutter
-# toolchain in the build image.
+# Lint baseline: flutter_lints 6.x recommended set (flutter.yaml = lints 6.x
+# recommended + flutter-specific rules). Additional project rules below.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    - avoid_dynamic_calls
+    - avoid_catches_without_on_clauses
+    - unnecessary_underscores
+    - prefer_final_locals
+    - prefer_function_declarations_over_variables
+    - unawaited_futures

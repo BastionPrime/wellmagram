@@ -1,8 +1,8 @@
 /// Per-account spoof profile storage (plan-v3 Т-1.6).
 ///
-/// Upstream keys profiles by a string scope (spoof_profile_<accountId>) with
+/// Upstream keys profiles by a string scope (`spoof_profile_<accountId>`) with
 /// a 'pending' scope for pre-login generation. wellmagram keys profiles by
-/// AccountKey (spoof_profile_<net>_<id>) so MAX and TG never collide, and
+/// AccountKey (`spoof_profile_<net>_<id>`) so MAX and TG never collide, and
 /// legacy pending-scope profiles migrate into the account key on commit —
 /// same semantics as SpoofingService.commitPendingSpoof.
 library;

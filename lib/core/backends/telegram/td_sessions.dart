@@ -39,7 +39,7 @@ abstract class TdGhostPrefsLike {
 
 typedef TdClientFactory = TdClientLike Function();
 
-/// Builds the per-account [TdClientConfig]: tg/<id> directories.
+/// Builds the per-account [TdClientConfig]: `tg/<id>` directories.
 class TdSessionPaths {
   /// Storage root that holds per-network directories.
   final String root;
@@ -47,7 +47,7 @@ class TdSessionPaths {
   TdSessionPaths({required this.root});
 
   /// Database directory of the account: `<root>/tg/<id>`
-  /// (plan 4.4 «per-account директории tg/<id>»).
+  /// (plan 4.4 «per-account директории `tg/<id>`»).
   String databaseDirectory(AccountKey account) => '$root/tg/${account.id}';
 
   /// Files directory of the account: `<root>/tg/<id>/files`.

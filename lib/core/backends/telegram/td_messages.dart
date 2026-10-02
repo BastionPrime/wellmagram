@@ -13,7 +13,7 @@
 /// - inputMessageText text:formattedText (entities may be empty) …
 /// - editMessageText chat_id message_id reply_markup
 ///   input_message_content → message.
-/// - deleteMessages chat_id message_ids:vector<int53> revoke:Bool → ok.
+/// - `deleteMessages chat_id message_ids:vector<int53> revoke:Bool` → ok.
 /// - addMessageReaction chat_id message_id reaction_type:ReactionType
 ///   is_big update_recent_reactions → ok; reactionTypeEmoji emoji:string.
 library;
@@ -32,7 +32,7 @@ int tgParseChatId(String chatId) {
   return id;
 }
 
-/// Parses a unified message id ('<int53>') to int.
+/// Parses `<int53>` to int.
 int tgParseMessageId(String messageId) {
   final id = int.tryParse(messageId);
   if (id == null) {
