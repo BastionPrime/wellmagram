@@ -39,6 +39,17 @@ flutter build apk --debug   # debug APK, arm64-v8a, includes libtdjson
 Telegram wire field names are machine-checked against the official TDLib
 schema: run `tools/td_schema_check.py` when touching API mappings.
 
+Line coverage for `lib/core/*` is one command:
+
+```bash
+tools/coverage.sh               # flutter test --coverage + summary (exit 0)
+tools/coverage.sh --min-line 80 # same, exit 1 if total line % < 80
+tools/coverage.sh --summary-only # re-print the last coverage/lcov.info summary
+```
+
+It prints a per-directory line-coverage table for `lib/core/*`, the total,
+and the five least covered files. CI-safe by default (always exits 0).
+
 See `CHANGELOG.md` for the milestone history and the current state of the
 TDLib bridge decision.
 
