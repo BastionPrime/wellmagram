@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-// Minimal wellmagram app entry (OPE-2568 Шаг 3). The full unified UI is
+// Minimal wellmagram app entry. The full unified UI is
 // Фаза 3 (plan-v3); this entry exists so the debug-APK builds and hosts
 // the core modules produced by Фазы 1–2.
 Future<void> main() async {

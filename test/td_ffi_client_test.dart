@@ -1,4 +1,4 @@
-// OPE-2568 Шаг 2 — unit-тесты TdFfiClient на структурном уровне без
+// Unit-тесты TdFfiClient на структурном уровне без
 // загрузки живой библиотеки (живой smoke — отдельный dart-run в образе,
 // tool/tdlib_live_smoke.dart): контракт create/send/execute/destroy
 // валидируется через injection-точку DynamicLibrary.open и фейковые
