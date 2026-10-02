@@ -5,6 +5,7 @@ import 'package:wellmagram/core/accounts/credential_store.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'package:wellmagram/core/accounts/spoof_bridge.dart';
 import 'package:wellmagram/core/app/session_manager.dart';
+import 'package:wellmagram/core/backends/max/max_api_seam.dart';
 import 'package:wellmagram/core/backends/max/max_backend.dart';
 import 'package:wellmagram/core/backends/messenger_backend.dart';
 import 'package:test/test.dart';
@@ -16,47 +17,52 @@ import 'in_memory_secure_storage.dart';
 // one live session and never re-enters the new account).
 // Scenarios:
 // - switch events reach subscribers in exact order (max1, max2, null on remove)
-// - concurrent start() calls converge to one live session, one switch event
+// - concurrent start() calls converge to one live session
 // - switch back does not re-login the target account (no second connect)
 // - re-activating the already-active account emits nothing and keeps state
 // - start while the previous switch is still in flight
 // - pause() is skipped for the already-paused former active session
-// - after removeAccount of the active account liveAccounts shrinks and a
-//   new start works
+// - state after removing the active account (liveAccounts shrinks, other
+//   account revivable, null marker broadcast)
+// - removeAccount of a non-active account keeps the active marker
 // - gap: no persistence of the active key exists (documented in the PR)
 
 const max1 = AccountKey(network: Network.max, id: 1);
 const max2 = AccountKey(network: Network.max, id: 2);
 const max3 = AccountKey(network: Network.max, id: 3);
 
+/// FakeMaxApi that counts connects (connect-and-login cycles) and pause
+/// calls, so tests can assert "no re-login on switch back" and "pause is
+/// skipped when already paused".
 class RecordingApi extends FakeMaxApi {
   int connectCount = 0;
   int pauseCount = 0;
 
   @override
-  Future<void> connectAndLogin() async {
+  Future<void> connect({required SessionSpec spec}) async {
     connectCount++;
-    await super.connectAndLogin();
+    await super.connect(spec: spec);
   }
 
   @override
-  Future<void> pause() async {
+  Future<void> disconnect() async {
     pauseCount++;
-    await super.pause();
+    await super.disconnect();
   }
 }
 
 class Harness {
   final secureStorage = InMemorySecureStorage();
   late final CredentialStore credentials = CredentialStore(secureStorage);
-  final records = <AccountKey, RecordingApi>{};
+  final apiByAccount = <AccountKey, RecordingApi>{};
+  final backends = <AccountKey, MaxBackend>{};
 
   late final SessionManager manager = SessionManager(
     mode: SessionMode.switchMode,
     factory: (account) {
       final api = RecordingApi();
-      records[account] = api;
-      return MaxBackend(
+      apiByAccount[account] = api;
+      final backend = MaxBackend(
         account: account,
         api: api,
         credentials: credentials,
@@ -70,6 +76,8 @@ class Harness {
           loadProxyUrl: () async => null,
         ),
       );
+      backends[account] = backend;
+      return backend;
     },
   );
 
@@ -120,7 +128,7 @@ void main() {
 
     expect(seen, [null]);
     expect(h.manager.activeKey, isNull);
-    expect(h.records[max1]!.pauseCount, 0,
+    expect(h.apiByAccount[max1]!.pauseCount, 0,
         reason: 'null marker only drops the active marker, sessions stay');
     await sub.cancel();
     await h.manager.dispose();
@@ -135,21 +143,19 @@ void main() {
     final seen = <AccountKey?>[];
     final sub = h.manager.activeChanges.listen(seen.add);
     // Fire both switches without awaiting in between.
-    final futures = [
+    await Future.wait([
       h.manager.start(max1),
       h.manager.start(max2),
-    ];
-    await Future.wait(futures);
+    ]);
     await pump();
 
     expect(h.manager.activeKey, max2);
-    expect(h.records[max2]!.backend, isNotNull);
     expect(h.manager.liveAccounts.length, 2);
-    // Both accounts got a backend and the latecomer is the live one.
-    expect(h.records[max2]!.state, BackendState.online);
-    // Whatever the interleaving, at most one backend is online now.
-    final online = h.records.values
-        .where((api) => api.state == BackendState.online)
+    // The latecomer is the live one; whatever the interleaving, exactly one
+    // backend is online now.
+    expect(h.backends[max2]!.state, BackendState.online);
+    final online = h.backends.values
+        .where((b) => b.state == BackendState.online)
         .length;
     expect(online, 1,
         reason: 'switch mode: exactly one live session after a switch');
@@ -170,11 +176,11 @@ void main() {
     await pump();
 
     expect(h.manager.activeKey, max1);
-    expect(h.records[max1]!.connectCount, 1,
+    expect(h.apiByAccount[max1]!.connectCount, 1,
         reason: 'R2: switching ≤1s without re-entering the account — '
             'the backend is resumed, not re-created or re-logged-in');
-    expect(h.records[max1]!.lastLoginToken, 'token-1');
-    expect(h.records[max2]!.state, BackendState.paused);
+    expect(h.apiByAccount[max1]!.lastLoginToken, 'token-1');
+    expect(h.backends[max2]!.state, BackendState.paused);
     await h.manager.dispose();
   });
 
@@ -190,8 +196,8 @@ void main() {
     await pump();
 
     expect(seen, [max1]);
-    expect(h.records[max1]!.connectCount, 1);
-    expect(h.records[max1]!.pauseCount, 0,
+    expect(h.apiByAccount[max1]!.connectCount, 1);
+    expect(h.apiByAccount[max1]!.pauseCount, 0,
         reason: 'the active session must not be paused by its own activation');
     await sub.cancel();
     await h.manager.dispose();
@@ -204,16 +210,17 @@ void main() {
     await h.login(max2, 'token-2');
     await h.login(max3, 'token-3');
 
-    final first = h.manager.start(max1);
-    final second = h.manager.start(max2);
-    final third = h.manager.start(max3);
-    await Future.wait([first, second, third]);
+    await Future.wait([
+      h.manager.start(max1),
+      h.manager.start(max2),
+      h.manager.start(max3),
+    ]);
     await pump();
 
     expect(h.manager.activeKey, max3);
-    expect(h.records[max3]!.state, BackendState.online);
-    final online = h.records.values
-        .where((api) => api.state == BackendState.online)
+    expect(h.backends[max3]!.state, BackendState.online);
+    final online = h.backends.values
+        .where((b) => b.state == BackendState.online)
         .length;
     expect(online, 1);
     await h.manager.dispose();
@@ -227,10 +234,10 @@ void main() {
 
     await h.manager.start(max1);
     await h.manager.pause(max1);
-    expect(h.records[max1]!.pauseCount, 1);
+    expect(h.apiByAccount[max1]!.pauseCount, 1);
 
     await h.manager.start(max2);
-    expect(h.records[max1]!.pauseCount, 1,
+    expect(h.apiByAccount[max1]!.pauseCount, 1,
         reason: 'pause() must be skipped for an already-paused backend');
     expect(h.manager.activeKey, max2);
     await h.manager.dispose();
@@ -257,7 +264,7 @@ void main() {
     expect(h.manager.activeKey, isNull);
     expect(h.manager.liveAccounts, [max1]);
     expect(h.manager.backendOf(max2), isNull);
-    expect(h.records[max2]!.disposed, isTrue);
+    expect(h.apiByAccount[max2]!.disposed, isTrue);
     // The other account keeps its (paused) session and can be activated.
     final revived = await h.manager.start(max1);
     await pump();
