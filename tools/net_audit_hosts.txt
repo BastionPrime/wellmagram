@@ -1,0 +1,29 @@
+# net_audit whitelist: hostnames the release build is allowed to contact.
+# One hostname per line, lowercase. '#' starts a comment.
+# Scope: OPE plan T-0.9/T-5.6 (network audit of release builds).
+#
+# --- MAX backend (api.oneme.ru family) ---
+api.oneme.ru
+api2.oneme.ru
+
+# --- MAX media delivery ---
+cdn.max.ru
+media.max.ru
+
+# --- Telegram DC / MTProto endpoints ---
+venus.web.telegram.org
+vesta.web.telegram.org
+aurora.web.telegram.org
+jupiter.web.telegram.org
+pluto.web.telegram.org
+static.telegram.org
+
+# --- FCM: google flavor only ---
+# Keep this section only for `--flavor google` audits; for foss flavor
+# audits these must NOT appear in the trace.
+mtalk.google.com
+fcm.googleapis.com
+
+# --- OS/app-transport fallbacks (verify each appearance) ---
+# Android NTP/OS hosts may still show up on device traces.
+time.android.com
