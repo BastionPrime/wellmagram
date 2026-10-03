@@ -156,9 +156,9 @@ void main() {
     final h = Harness(SessionMode.switchMode);
     await h.login(max1, 'token-1');
 
-    void Function(int? accountId) callback = (id) {
-      unawaited(h.manager.onSwitcherSelected(id));
-    };
+    void callback(int? accountId) {
+      unawaited(h.manager.onSwitcherSelected(accountId));
+    }
     callback(1);
     await pump();
     await pump();

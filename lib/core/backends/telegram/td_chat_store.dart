@@ -72,7 +72,7 @@ bool tgChatIsGroup(Map<String, dynamic> chat) {
   }
 }
 
-/// Chat title with the same fallback as the MAX mapper («Чат <id>»).
+/// Chat title with the same fallback as the MAX mapper (`«Чат <id>»`).
 String tgChatTitle(Map<String, dynamic> chat) {
   final title = chat['title'];
   final id = chat['id'];

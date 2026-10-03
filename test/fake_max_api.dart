@@ -17,6 +17,7 @@ class FakeMaxApi implements MaxApiLike {
   List<(int, String)> sentTyping = [];
   List<String> markedRead = [];
 
+  @override
   MaxSessionState state = MaxSessionState.disconnected;
   final _stateController = StreamController<MaxSessionState>.broadcast();
   final _pushController = StreamController<MaxPushPacket>.broadcast();

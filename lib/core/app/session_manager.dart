@@ -147,7 +147,7 @@ class SessionManager {
       _activeKey = null;
       _activeController.add(null);
     }
-    var removed = await credentials.deleteAccountCredentials(account);
+    final removed = await credentials.deleteAccountCredentials(account);
     final spoofRemoved = await spoofBridge.remove(account);
     return removed || spoofRemoved;
   }

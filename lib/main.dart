@@ -1,3 +1,7 @@
+// The SDK package is provided via dependency_overrides (workspace-internal
+// resolution, see pubspec.yaml); an explicit dependency entry is impossible,
+// so this import's lint is suppressed.
+// ignore: depend_on_referenced_packages
 import 'package:flutter/material.dart';
 
 // Minimal wellmagram app entry (OPE-2568 Шаг 3). The full unified UI is

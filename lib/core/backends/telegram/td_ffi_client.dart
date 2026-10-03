@@ -186,7 +186,7 @@ class TdFfiClient implements TdClientLike {
         return state is Map<String, dynamic> &&
             state['@type'] == 'authorizationStateClosed';
       }
-    } catch (_) {
+    } on FormatException {
       // Malformed payload is not terminal — the stop flag still ends the loop.
     }
     return false;
@@ -225,8 +225,8 @@ class TdFfiClient implements TdClientLike {
       '',
       Pointer<Void>.fromAddress(clientAddress),
       _Bindings(
-        send: send ?? (_, __) {},
-        execute: execute ?? (_, __) => null,
+        send: send ?? (_, _) {},
+        execute: execute ?? (_, _) => null,
         destroy: destroy ?? (_) {},
       ),
       teardownTimeout,
@@ -281,7 +281,9 @@ class TdFfiClient implements TdClientLike {
         if (decoded is Map<String, dynamic>) {
           _controller.add(TdResponse(decoded));
         }
-      } catch (_) {
+      } on FormatException {
+        // Undecodable answer — skipped, per the mock seam contract.
+      } on TypeError {
         // Non-object answer — skipped, per the mock seam contract.
       }
     }
@@ -352,7 +354,7 @@ class TdFfiClient implements TdClientLike {
       } finally {
         calloc.free(native);
       }
-    } catch (_) {
+    } on ArgumentError {
       // TDLib may already be closing — the stop flag alone ends the loop.
     }
     _stopFlag?.value = 1;
