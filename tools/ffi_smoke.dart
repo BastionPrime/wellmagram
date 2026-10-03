@@ -24,7 +24,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import '../lib/core/backends/telegram/td_ffi_client.dart';
+import 'package:wellmagram/core/backends/telegram/td_ffi_client.dart';
 
 const _defaultTimeoutSeconds = 30;
 
@@ -163,7 +163,9 @@ Future<void> main(List<String> argv) async {
     _log('SMOKE FAIL: timed out after ${args.timeout.inSeconds} s waiting '
         'for updateAuthorizationState');
     exitCode = 1;
-  } catch (e) {
+  } on Object catch (e) {
+    // Deliberately broad: any adapter/library error is a smoke failure and
+    // must be reported, not rethrown (exit code 1 is the tool's contract).
     _log('SMOKE FAIL: $e');
     exitCode = 1;
   } finally {
@@ -171,8 +173,8 @@ Future<void> main(List<String> argv) async {
     // no-op by the adapter contract.
     try {
       await client?.destroy();
-    } catch (_) {}
-    stdout.flush();
+    } on Object catch (_) {}
+    unawaited(stdout.flush());
     exit(exitCode);
   }
 }
