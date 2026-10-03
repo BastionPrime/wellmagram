@@ -45,8 +45,8 @@ the server never learns the chat was opened.
 
 | Network | Mechanism | Suppression point |
 |---|---|---|
-| Telegram | on enable: `setOption name:"online" = optionValueBoolean{false}` — TDLib stops reporting the account online on activity; on disable: `setOption name:"online" = optionValueEmpty` — returns online management to TDLib's automatic behaviour (a forced `true` would pin the status instead); after a reconnect the option is re-applied, because TDLib options reset on client restart | enable/disable: `TdGhost.setGhostMode` (`lib/core/backends/telegram/td_ghost.dart:102-112`), option senders (`:121-136`); re-apply: `TdGhost.reapplyOnline` (`:116-119`) |
-| MAX | reuses the upstream «невидимка»: the session is established with `pingInteractive` disabled, so the server does not see interactive activity (no keep-alive pings while the user is active) | `MaxBackend.setGhostMode` delegates to `api.setGhostMode` and emits a `ghostModeChanged` event (`lib/core/backends/max/max_backend.dart:159-174`) |
+| Telegram | on enable: `setOption name:"online" = optionValueBoolean{false}` — TDLib stops reporting the account online on activity; on disable: `setOption name:"online" = optionValueEmpty` — returns online management to TDLib's automatic behaviour (a forced `true` would pin the status instead); the option resets on client restart, and `TdGhost.reapplyOnline` is exposed for the reconnect path (not yet wired to a production reconnect call site) | enable/disable: `TdGhost.setGhostMode` (`lib/core/backends/telegram/td_ghost.dart:102-112`), option senders (`:121-136`); re-apply helper: `TdGhost.reapplyOnline` (`:116-119`) |
+| MAX | reuses the upstream «невидимка»: `api.setGhostMode` flips the server-side invisible mode, so the server does not see interactive activity (no keep-alive pings while the user is active) | `MaxBackend.setGhostMode` delegates to `api.setGhostMode` and emits a `ghostModeChanged` event (`lib/core/backends/max/max_backend.dart:159-174`) |
 
 ## Default semantics
 
@@ -104,9 +104,10 @@ capability contract:
 - **Online semantics.** MAX: the server stops seeing interactive pings
   (may still see the connection itself — the session stays logged in and
   receiving pushes). Telegram: an explicit `setOption "online" = false` is
-  sent, and TDLib stops reporting online on any activity; the option is
-  re-applied after reconnects because TDLib resets options on client restart
-  (`lib/core/backends/telegram/td_ghost.dart:114-119`).
+  sent, and TDLib stops reporting online on any activity; the option
+  resets on client restart, and `TdGhost.reapplyOnline` is exposed for the
+  reconnect path (re-apply, not assume — not yet wired to a production
+  reconnect call site) (`lib/core/backends/telegram/td_ghost.dart:114-119`).
 - **Persistence.** The Telegram profile survives restarts (`tg_ghost:<id>`
   prefs entry, wire format: three flag characters, e.g. `110` = read+typing
   live — `lib/core/backends/telegram/td_sessions.dart:91-128`).
