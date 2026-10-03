@@ -55,7 +55,7 @@ class LegacyDbMigrator {
         try {
           await legacy.insertInto(db, table, row);
           inserted++;
-        } catch (error, stackTrace) {
+        } on Object catch (error, stackTrace) {
           dev.log(
             'LegacyDbMigrator: пропуск повреждённой строки в "$table" '
             '(account ${account.id}): $error',
