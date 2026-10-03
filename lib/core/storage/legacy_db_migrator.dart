@@ -6,6 +6,8 @@
 /// untouched (rollback-safe: legacy stays until the user confirms removal).
 library;
 
+import 'dart:developer' as dev;
+
 import 'package:wellmagram/core/accounts/account_key.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'per_account_databases.dart';
@@ -32,6 +34,11 @@ class LegacyDbMigrator {
   });
 
   /// Migrates one account's rows; returns a per-table row count.
+  ///
+  /// Damaged rows (the target insert rejects them, e.g. a corrupted or
+  /// missing `account_id`) are skipped with a log instead of failing the
+  /// whole migration: the remaining rows still land in the per-account
+  /// database (ticket OPE-3754).
   Future<Map<String, int>> migrateAccount(AccountKey account) async {
     if (account.network != Network.max) {
       throw UnsupportedError(
@@ -43,10 +50,21 @@ class LegacyDbMigrator {
     final db = await databases.forAccount(account);
     for (final table in accountTables) {
       final rows = await legacy.rowsFor(table, account.id);
+      var inserted = 0;
       for (final row in rows) {
-        await legacy.insertInto(db, table, row);
+        try {
+          await legacy.insertInto(db, table, row);
+          inserted++;
+        } catch (error, stackTrace) {
+          dev.log(
+            'LegacyDbMigrator: пропуск повреждённой строки в "$table" '
+            '(account ${account.id}): $error',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
       }
-      migrated[table] = rows.length;
+      migrated[table] = inserted;
     }
     return migrated;
   }
