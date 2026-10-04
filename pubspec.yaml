@@ -17,6 +17,7 @@ dependencies:
   # (plugin requires the Flutter SDK); the core module keeps a thin seam
   # (AccountsStore.usePrefsLoader) so unit tests never touch the plugin.
   # shared_preferences: ^2.5.4
+  rxdart: ^0.27.7
 
 dev_dependencies:
   test: ^1.25.0
