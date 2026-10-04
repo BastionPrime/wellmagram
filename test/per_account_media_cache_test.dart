@@ -1,10 +1,9 @@
 import 'package:wellmagram/core/accounts/account_key.dart';
+import 'package:wellmagram/core/storage/legacy_db_migrator.dart';
 import 'package:wellmagram/core/storage/per_account_media_cache.dart';
 import 'package:wellmagram/core/storage/per_account_databases.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'package:test/test.dart';
-import 'dart:io';
-import 'dart:core';
 
 const max1 = AccountKey(network: Network.max, id: 1);
 const max2 = AccountKey(network: Network.max, id: 2);
@@ -300,41 +299,41 @@ void main() {
       final paths = FakePaths();
       final fs = FakeFs();
       final cache = PerAccountMediaCache(paths: paths, fs: fs); // Uses default 50MB
-      
+
       expect(cache.maxSizeBytes, equals(50 * 1024 * 1024)); // 50MB
     });
-    
+
     test('custom size limit is properly set', () async {
       final paths = FakePaths();
       final fs = FakeFs();
       final cache = PerAccountMediaCache(paths: paths, fs: fs, maxSizeBytes: 1024); // 1KB
-      
+
       expect(cache.maxSizeBytes, equals(1024));
     });
-    
+
     test('initial cache size is zero', () async {
       final paths = FakePaths();
       final fs = FakeFs();
       final cache = PerAccountMediaCache(paths: paths, fs: fs);
-      
+
       expect(await cache.getCurrentSize(max1), equals(0));
     });
-    
+
     test('touch updates access time for LRU without crashing on missing entries', () async {
       final paths = FakePaths();
       final fs = FakeFs();
       final cache = PerAccountMediaCache(paths: paths, fs: fs);
-      
+
       // This should not crash even if file is not tracked
       await cache.touch(max1, '/fake/file.jpg');
       expect(await cache.getCurrentSize(max1), equals(0));
     });
-    
+
     test('calculateActualSize returns 0 for non-existent directory', () async {
       final paths = FakePaths();
       final fs = FakeFs();
       final cache = PerAccountMediaCache(paths: paths, fs: fs);
-      
+
       expect(await cache.calculateActualSize(max1), equals(0));
     });
   });

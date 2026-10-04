@@ -24,13 +24,13 @@ class PerAccountMediaCache {
   final AccountStoragePaths paths;
   final AccountStorageFs fs;
   final int maxSizeBytes; // Maximum size in bytes per account
-  
+
   // In-memory tracking of cache entries for LRU eviction
   final Map<AccountKey, LinkedHashMap<String, CacheEntry>> _cacheEntries = {};
 
   PerAccountMediaCache({
-    required this.paths, 
-    required this.fs, 
+    required this.paths,
+    required this.fs,
     this.maxSizeBytes = 50 * 1024 * 1024, // Default 50MB per account
   });
 
@@ -44,35 +44,35 @@ class PerAccountMediaCache {
     if (await fs.exists(dir)) {
       await fs.delete(dir, recursive: true);
     }
-    
+
     // Clear in-memory tracking
     _cacheEntries.remove(account);
   }
 
   /// Adds a file to the cache tracking and evicts if necessary
   Future<void> trackFile(AccountKey account, String filePath) async {
-    File file = File(filePath);
+    final file = File(filePath);
     if (!await file.exists()) {
       // If file doesn't exist, we shouldn't track it
       return;
     }
-    
+
     try {
       final stat = await file.stat();
       final size = stat.size;
-      
+
       // Get or create cache entries for this account
-      var entries = _cacheEntries.putIfAbsent(account, () => LinkedHashMap<String, CacheEntry>());
-      
+      final entries = _cacheEntries.putIfAbsent(account, () => LinkedHashMap<String, CacheEntry>());
+
       // Add new entry
       entries[filePath] = CacheEntry(filePath, size);
-      
+
       // Update access time
       entries[filePath]!.lastAccessed = DateTime.now();
-      
+
       // Check if we exceed the size limit and evict if necessary
       await _enforceSizeLimit(account);
-    } catch (e) {
+    } on FileSystemException {
       // If we can't stat the file, don't track it
       return;
     }
@@ -84,8 +84,8 @@ class PerAccountMediaCache {
     if (entries == null) return;
 
     // Calculate total size
-    int totalSize = entries.values.fold(0, (sum, entry) => sum + entry.size);
-    
+    int totalSize = entries.values.fold<int>(0, (sum, entry) => sum + entry.size);
+
     if (totalSize <= maxSizeBytes) {
       return; // Size limit not exceeded
     }
@@ -97,7 +97,7 @@ class PerAccountMediaCache {
     // Remove oldest entries until size is within limit
     for (final entry in sortedEntries) {
       if (totalSize <= maxSizeBytes) break;
-      
+
       // Delete the file from filesystem
       try {
         final file = File(entry.filePath);
@@ -105,11 +105,11 @@ class PerAccountMediaCache {
           await file.delete();
           totalSize -= entry.size;
         }
-      } catch (e) {
+      } on FileSystemException {
         // Continue even if individual file deletion fails
         continue;
       }
-      
+
       // Remove from tracking
       entries.remove(entry.filePath);
     }
@@ -127,32 +127,32 @@ class PerAccountMediaCache {
   Future<int> getCurrentSize(AccountKey account) async {
     final entries = _cacheEntries[account];
     if (entries == null) return 0;
-    
-    return entries.values.fold(0, (sum, entry) => sum + entry.size);
+
+    return entries.values.fold<int>(0, (sum, entry) => sum + entry.size);
   }
-  
+
   /// Calculates actual directory size (when in-memory tracking isn't reliable)
   Future<int> calculateActualSize(AccountKey account) async {
     final dirPath = await paths.mediaCacheDir(account);
     final dir = Directory(dirPath);
-    
+
     if (!await dir.exists()) {
       return 0;
     }
-    
+
     int totalSize = 0;
-    await for (FileSystemEntity entity in dir.list(recursive: true)) {
+    await for (final entity in dir.list(recursive: true)) {
       if (entity is File) {
         try {
-          FileStat stat = await entity.stat();
+          final stat = await entity.stat();
           totalSize += stat.size;
-        } catch (e) {
+        } on FileSystemException {
           // Skip files that can't be accessed
           continue;
         }
       }
     }
-    
+
     return totalSize;
   }
 }
