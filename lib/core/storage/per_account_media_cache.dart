@@ -12,27 +12,36 @@ import 'dart:collection';
 import 'package:wellmagram/core/accounts/account_key.dart';
 import 'per_account_databases.dart';
 
+/// Injectable clock seam so LRU order is deterministic in tests.
+typedef CacheClock = DateTime Function();
+
 class CacheEntry {
   final String filePath;
   final int size;
   DateTime lastAccessed;
 
-  CacheEntry(this.filePath, this.size) : lastAccessed = DateTime.now();
+  CacheEntry(this.filePath, this.size, this.lastAccessed);
 }
 
 class PerAccountMediaCache {
   final AccountStoragePaths paths;
   final AccountStorageFs fs;
   final int maxSizeBytes; // Maximum size in bytes per account
+  final CacheClock clock;
 
   // In-memory tracking of cache entries for LRU eviction
   final Map<AccountKey, LinkedHashMap<String, CacheEntry>> _cacheEntries = {};
+
+  // Serializes per-account mutations (tracking + eviction) so concurrent
+  // writers cannot interleave and produce torn bookkeeping.
+  final Map<AccountKey, Future<void>> _accountLocks = {};
 
   PerAccountMediaCache({
     required this.paths,
     required this.fs,
     this.maxSizeBytes = 50 * 1024 * 1024, // Default 50MB per account
-  });
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now;
 
   Future<String> rootFor(AccountKey account) => paths.mediaCacheDir(account);
 
@@ -49,33 +58,45 @@ class PerAccountMediaCache {
     _cacheEntries.remove(account);
   }
 
-  /// Adds a file to the cache tracking and evicts if necessary
+  /// Adds a file to the cache tracking and evicts if necessary.
+  /// Per-account operations are serialized: concurrent callers queue behind
+  /// each other, so tracking and eviction never interleave.
   Future<void> trackFile(AccountKey account, String filePath) async {
-    final file = File(filePath);
-    if (!await file.exists()) {
-      // If file doesn't exist, we shouldn't track it
-      return;
-    }
+    return _serialize(account, () async {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        // If file doesn't exist, we shouldn't track it
+        return;
+      }
 
-    try {
-      final stat = await file.stat();
-      final size = stat.size;
+      try {
+        final stat = await file.stat();
+        final size = stat.size;
 
-      // Get or create cache entries for this account
-      final entries = _cacheEntries.putIfAbsent(account, () => LinkedHashMap<String, CacheEntry>());
+        // Get or create cache entries for this account
+        final entries = _cacheEntries.putIfAbsent(account, () => LinkedHashMap<String, CacheEntry>());
 
-      // Add new entry
-      entries[filePath] = CacheEntry(filePath, size);
+        // Add new entry
+        entries[filePath] = CacheEntry(filePath, size, clock());
 
-      // Update access time
-      entries[filePath]!.lastAccessed = DateTime.now();
+        // Check if we exceed the size limit and evict if necessary
+        await _enforceSizeLimit(account);
+      } on FileSystemException {
+        // If we can't stat the file, don't track it
+        return;
+      }
+    });
+  }
 
-      // Check if we exceed the size limit and evict if necessary
-      await _enforceSizeLimit(account);
-    } on FileSystemException {
-      // If we can't stat the file, don't track it
-      return;
-    }
+  /// Runs [action] exclusively for [account]: later callers await the chain
+  /// of earlier ones instead of racing them.
+  Future<void> _serialize(AccountKey account, Future<void> Function() action) {
+    final previous = _accountLocks[account] ?? Future<void>.value();
+    final result = previous.then((_) => action());
+    // Swallow errors from earlier links so a failed op does not poison the
+    // chain, but keep the chain order.
+    _accountLocks[account] = result.catchError((_) {});
+    return result;
   }
 
   /// Enforces the size limit by removing oldest accessed items (LRU)
@@ -98,6 +119,13 @@ class PerAccountMediaCache {
     for (final entry in sortedEntries) {
       if (totalSize <= maxSizeBytes) break;
 
+      // Never evict the most recently tracked entry: a file that was just
+      // written must stay in the cache even if it alone exceeds the budget
+      // (otherwise a single large download would delete itself).
+      if (sortedEntries.length > 1 && identical(entry, sortedEntries.last)) {
+        break;
+      }
+
       // Delete the file from filesystem
       try {
         final file = File(entry.filePath);
@@ -115,11 +143,11 @@ class PerAccountMediaCache {
     }
   }
 
-  /// Updates the access time for a cached file
+  /// Updates the access time for a cached file (LRU recency).
   Future<void> touch(AccountKey account, String filePath) async {
     final entries = _cacheEntries[account];
     if (entries != null && entries.containsKey(filePath)) {
-      entries[filePath]!.lastAccessed = DateTime.now();
+      entries[filePath]!.lastAccessed = clock();
     }
   }
 
