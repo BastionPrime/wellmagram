@@ -25,9 +25,9 @@ REPO = Path(__file__).resolve().parent.parent
 WHITELIST = REPO / "tools" / ".declassify_whitelist"
 
 PATTERNS = {
-    "internal-ticket-ref": re.compile(r"\bOPE-\d+\b"),
+    "internal-ticket-ref": re.compile(r"\bOPE-\d+\b", re.IGNORECASE),
     "internal-hostname": re.compile(
-        r"\b(?:[\w.-]*\.)?(?:itkadr-git|myrmidon|adm-dev-eng)\b"
+        r"\b(?:[\w.-]*\.)?(?:itkadr-git|myrmidon|adm-dev-\w+)\b"
     ),
     "internal-ip": re.compile(r"\b10\.10\.\d{1,3}\.\d{1,3}\b"),
 }

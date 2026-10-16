@@ -13,7 +13,7 @@ import 'package:test/test.dart';
 import 'fake_max_api.dart';
 import 'in_memory_secure_storage.dart';
 
-// OPE-3719: extra switch-mode coverage (R2 target: switching keeps exactly
+// Extra switch-mode coverage (R2 target: switching keeps exactly
 // one live session and never re-enters the new account).
 // Scenarios:
 // - switch events reach subscribers in exact order (max1, max2, null on remove)
