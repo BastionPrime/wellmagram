@@ -4,3 +4,4 @@ build/
 coverage/
 *.log
 android/local.properties
+docs/EXPERIMENTS/results/
