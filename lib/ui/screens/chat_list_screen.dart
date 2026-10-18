@@ -9,6 +9,8 @@ class ChatListScreen extends StatelessWidget {
   final ChatListSource aggregator;
   final Map<String, AccountProfile> accounts;
   final Map<String, Capabilities> capabilities;
+  final Set<String> pinnedChatKeys;
+  final Set<String> mutedChatKeys;
   final Future<void> Function(UnifiedChat chat)? onMarkRead;
   final Future<void> Function(UnifiedChat chat)? onMute;
   final Future<void> Function(UnifiedChat chat)? onArchive;
@@ -19,6 +21,8 @@ class ChatListScreen extends StatelessWidget {
     required this.aggregator,
     this.accounts = const {},
     this.capabilities = const {},
+    this.pinnedChatKeys = const {},
+    this.mutedChatKeys = const {},
     this.onMarkRead,
     this.onMute,
     this.onArchive,
@@ -57,8 +61,9 @@ class ChatListScreen extends StatelessWidget {
         ),
       );
 
-  // The current UnifiedChat schema has no pinned field; preserve aggregator order.
-  bool _isPinned(UnifiedChat chat) => false;
+  String _key(UnifiedChat chat) => '${chat.account.storageId}/${chat.id}';
+
+  bool _isPinned(UnifiedChat chat) => pinnedChatKeys.contains(_key(chat));
 
   Widget _tile(BuildContext context, UnifiedChat chat) {
     final account = accounts[chat.account.storageId];
@@ -88,8 +93,7 @@ class ChatListScreen extends StatelessWidget {
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         if (chat.unreadCount > 0)
           CircleAvatar(radius: 12, child: Text('${chat.unreadCount}', style: const TextStyle(fontSize: 11))),
-        if (chat.unreadCount > 0 && chat.lastMessagePreview != null) const SizedBox(width: 6),
-        if (chat.lastMessagePreview != null && chat.title.isNotEmpty && _muted(chat))
+        if (mutedChatKeys.contains(_key(chat)))
           const Icon(Icons.volume_off, size: 18),
         if (account != null) ...[
           const SizedBox(width: 8),
