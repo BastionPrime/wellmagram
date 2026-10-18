@@ -12,7 +12,7 @@ import 'package:wellmagram/ui/screens/chat_list_screen.dart';
 class FixtureAggregator implements ChatListSource {
   FixtureAggregator(this.chats);
   final List<UnifiedChat> chats;
-  final _controller = StreamController<List<UnifiedChat>>.broadcast();
+  final _controller = StreamController<List<UnifiedChat>>();
   @override
   Stream<List<UnifiedChat>> get chatListStream => _controller.stream;
   @override
