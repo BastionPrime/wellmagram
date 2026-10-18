@@ -1,93 +1,59 @@
-/// ChatListAggregator (plan OPE-2270 T-3.1).
-///
-/// Merges chat streams and updates across messenger backends into a single
-/// unified chat list, sorted by lastEventTime descending with tie-breaking by id.
+/// Read-only unified chat list assembled from the available account backends.
 library;
 
 import 'dart:async';
 
-import '../accounts/account_key.dart';
 import '../backends/messenger_backend.dart';
-import '../models/unified/backend_event.dart';
 import '../models/unified/unified_chat.dart';
+import 'chat_list_source.dart';
 
-class ChatListAggregator {
+class ChatListAggregator implements ChatListSource {
   final List<MessengerBackend> _backends;
   final Map<String, UnifiedChat> _chats = {};
   final StreamController<List<UnifiedChat>> _controller =
       StreamController<List<UnifiedChat>>.broadcast();
-  final List<StreamSubscription<BackendEvent>> _subscriptions = [];
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
 
   ChatListAggregator(this._backends);
 
-  static String _chatKey(AccountKey account, String id) =>
-      '${account.network.name}:${account.id}:$id';
-
-  /// Stream of sorted chat list updates emitted whenever chats change.
+  @override
   Stream<List<UnifiedChat>> get chatListStream => _controller.stream;
 
-  /// Adds or updates a chat in the in-memory aggregated model.
-  void addChat(UnifiedChat chat) {
-    _chats[_chatKey(chat.account, chat.id)] = chat;
-    _emit();
-  }
-
-  /// Ingests an initial or updated chat (alias for [addChat]).
-  void ingest(UnifiedChat chat) => addChat(chat);
-
-  /// Subscribes to events from all backends and begins aggregation.
   void start() {
     for (final backend in _backends) {
-      _subscriptions.add(backend.events.listen(_handleBackendEvent));
+      _subscriptions.add(backend.events.listen((_) => _refreshBackend(backend)));
+      _refreshBackend(backend);
     }
   }
 
-  void _handleBackendEvent(BackendEvent event) {
-    final chatId = event.chatId;
-    if (chatId == null) {
-      // Event without chat is ignored.
-      return;
+  Future<void> _refreshBackend(MessengerBackend backend) async {
+    final chats = await backend.chats();
+    _chats.removeWhere((key, chat) => chat.account == backend.account);
+    for (final chat in chats) {
+      _chats[_key(chat)] = chat;
     }
-
-    final key = _chatKey(event.account, chatId);
-    final existing = _chats[key];
-    if (existing == null) {
-      // Event for an unknown chat is ignored.
-      return;
-    }
-
-    final updated = applyEventToChat(existing, event);
-    if (updated != existing) {
-      _chats[key] = updated;
-      _emit();
-    }
+    _publish();
   }
 
-  void _emit() {
-    if (!_controller.isClosed) {
-      _controller.add(snapshot());
-    }
-  }
+  String _key(UnifiedChat chat) => '${chat.account.storageId}/${chat.id}';
 
-  /// Returns a deterministic snapshot of the chat list for cold starts.
-  ///
-  /// Sorted descending by [UnifiedChat.lastEventTime], then ascending by [UnifiedChat.id].
-  List<UnifiedChat> snapshot() {
-    final list = _chats.values.toList();
-    list.sort((a, b) {
-      final timeCmp = b.lastEventTime.compareTo(a.lastEventTime);
-      if (timeCmp != 0) return timeCmp;
-      return a.id.compareTo(b.id);
+  List<UnifiedChat> _sorted() => _chats.values.toList()
+    ..sort((a, b) {
+      final time = b.lastEventTime.compareTo(a.lastEventTime);
+      return time != 0 ? time : _key(a).compareTo(_key(b));
     });
-    return list;
+
+  void _publish() {
+    if (!_controller.isClosed) _controller.add(_sorted());
   }
 
-  /// Cancels all event subscriptions and closes the stream.
-  void dispose() {
-    for (final sub in _subscriptions) {
-      sub.cancel();
+  @override
+  List<UnifiedChat> snapshot() => List.unmodifiable(_sorted());
+
+  Future<void> dispose() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
     }
-    _subscriptions.clear();
-    _controller.close();
+    await _controller.close();
   }
 }
