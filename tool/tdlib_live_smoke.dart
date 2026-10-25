@@ -1,4 +1,4 @@
-// OPE-2568 Шаг 2/3 — живой smoke updateAuthorizationState на реальном TDLib-клиенте.
+// Живой smoke updateAuthorizationState на реальном TDLib-клиенте.
 // Загружает libtdjson.so (собран в wellmagram-builder:v2) через dart:ffi,
 // поднимает клиент, ждёт в receive-цикле updateAuthorizationState
 // (authorizationStateWaitTdlibParameters), шлёт close, уничтожает клиент.

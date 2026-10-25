@@ -38,7 +38,7 @@ class LegacyDbMigrator {
   /// Damaged rows (the target insert rejects them, e.g. a corrupted or
   /// missing `account_id`) are skipped with a log instead of failing the
   /// whole migration: the remaining rows still land in the per-account
-  /// database (ticket OPE-3754).
+  /// database.
   Future<Map<String, int>> migrateAccount(AccountKey account) async {
     if (account.network != Network.max) {
       throw UnsupportedError(

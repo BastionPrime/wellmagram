@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- wellmagram debug skeleton (OPE-2568 Шаг 3): минимальный набор под Фазы 1–2.
+    <!-- wellmagram debug skeleton: минимальный набор под Фазы 1–2.
          FGS-разрешения и сервис ConnectionForegroundService — из
          AndroidManifest-connection.xml (Т-1.9), вмержены сюда по плану Т-0.1/Т-0.2.
          Komet-специфика (NFC HCE, deep links, FCM, upload/call services) не

@@ -1,0 +1,2 @@
+# Intentional exceptions: `path:line` per line, comments start with #.
+# Example (unused): lib/main.dart:3
