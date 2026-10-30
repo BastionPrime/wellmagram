@@ -1,111 +1,100 @@
+/// ChatListAggregator (plan OPE-2270 T-3.1).
+///
+/// Merges chat streams and updates across messenger backends into a single
+/// unified chat list, sorted by lastEventTime descending with tie-breaking by id.
+library;
+
 import 'dart:async';
-import 'package:rxdart/rxdart.dart';
 
-import '../models/unified/unified_chat.dart';
-import '../models/unified/backend_event.dart';
+import '../accounts/account_key.dart';
 import '../backends/messenger_backend.dart';
+import '../models/unified/backend_event.dart';
+import '../models/unified/unified_chat.dart';
 
-/// Агрегирует списки чатов из разных бэкендов в один единый список,
-/// сортированный по времени последнего сообщения.
 class ChatListAggregator {
   final List<MessengerBackend> _backends;
   final Map<String, UnifiedChat> _chats = {};
-  final BehaviorSubject<List<UnifiedChat>> _chatListSubject;
+  final StreamController<List<UnifiedChat>> _controller =
+      StreamController<List<UnifiedChat>>.broadcast();
+  final List<StreamSubscription<BackendEvent>> _subscriptions = [];
 
-  Stream<List<UnifiedChat>> get chatListStream => _chatListSubject.stream;
+  ChatListAggregator(this._backends);
 
-  ChatListAggregator(this._backends) : _chatListSubject = BehaviorSubject.seeded([]);
+  static String _chatKey(AccountKey account, String id) =>
+      '${account.network.name}:${account.id}:$id';
 
-  /// Подписывается на события всех бэкендов и начинает агрегацию
+  /// Stream of sorted chat list updates.
+  ///
+  /// Emits the current snapshot on listen, then all subsequent updates.
+  Stream<List<UnifiedChat>> get chatListStream => _stream();
+
+  Stream<List<UnifiedChat>> _stream() async* {
+    yield snapshot();
+    yield* _controller.stream;
+  }
+
+  /// Adds or updates a chat in the in-memory aggregated model.
+  void addChat(UnifiedChat chat) {
+    _chats[_chatKey(chat.account, chat.id)] = chat;
+    _emit();
+  }
+
+  /// Ingests an initial or updated chat (alias for [addChat]).
+  void ingest(UnifiedChat chat) => addChat(chat);
+
+  /// Subscribes to events from all backends and begins aggregation.
   void start() {
     for (final backend in _backends) {
-      backend.backendEvents.listen(_handleBackendEvent);
+      _subscriptions.add(backend.events.listen(_handleBackendEvent));
     }
   }
 
-  /// Обрабатывает события от бэкендов
   void _handleBackendEvent(BackendEvent event) {
-    switch (event.type) {
-      case BackendEventType.chatAdded:
-        if (event.chat != null) {
-          _chats[event.chat!.id] = event.chat!;
-          _updateChatList();
-        }
-        break;
-      case BackendEventType.chatUpdated:
-        if (event.chat != null && _chats.containsKey(event.chat!.id)) {
-          // Обновляем существующий чат
-          _chats[event.chat!.id] = event.chat!;
-          _updateChatList();
-        }
-        break;
-      case BackendEventType.chatRemoved:
-        if (event.chat != null) {
-          _chats.remove(event.chat!.id);
-          _updateChatList();
-        }
-        break;
-      case BackendEventType.messageReceived:
-        // Обновляем lastMessageTime для соответствующего чата
-        if (event.chatId != null && _chats.containsKey(event.chatId!)) {
-          final chat = _chats[event.chatId!]!;
-          if (event.timestamp != null) {
-            // Создаем обновленный чат с новым временем последнего сообщения
-            final updatedChat = UnifiedChat(
-              id: chat.id,
-              title: chat.title,
-              lastMessage: event.message ?? chat.lastMessage,
-              lastMessageTime: event.timestamp!,
-              unreadCount: event.unreadCount ?? chat.unreadCount,
-              isMuted: chat.isMuted,
-              avatarUrl: chat.avatarUrl,
-              type: chat.type,
-              backendType: chat.backendType,
-            );
-            _chats[event.chatId!] = updatedChat;
-            _updateChatList();
-          }
-        }
-        break;
-      default:
-        // Игнорируем другие типы событий
-        break;
+    final chatId = event.chatId;
+    if (chatId == null) {
+      // Event without chat is ignored.
+      return;
+    }
+
+    final key = _chatKey(event.account, chatId);
+    final existing = _chats[key];
+    if (existing == null) {
+      // Event for an unknown chat is ignored.
+      return;
+    }
+
+    final updated = applyEventToChat(existing, event);
+    if (updated != existing) {
+      _chats[key] = updated;
+      _emit();
     }
   }
 
-  /// Обновляет список чатов и отправляет его подписчикам
-  void _updateChatList() {
-    final chats = _chats.values.toList();
-    
-    // Сортировка по времени последнего сообщения (по убыванию), 
-    // с дополнительной сортировкой по ID для стабильности порядка
-    chats.sort((a, b) {
-      // Сначала сравниваем по времени последнего сообщения
-      final timeCompare = (b.lastMessageTime?.compareTo(a.lastMessageTime ?? 0) ?? 0);
-      if (timeCompare != 0) {
-        return timeCompare;
-      }
-      // Если время одинаковое, используем ID для стабильности
+  void _emit() {
+    if (!_controller.isClosed) {
+      _controller.add(snapshot());
+    }
+  }
+
+  /// Returns a deterministic snapshot of the chat list for cold starts.
+  ///
+  /// Sorted descending by [UnifiedChat.lastEventTime], then ascending by [UnifiedChat.id].
+  List<UnifiedChat> snapshot() {
+    final list = _chats.values.toList();
+    list.sort((a, b) {
+      final timeCmp = b.lastEventTime.compareTo(a.lastEventTime);
+      if (timeCmp != 0) return timeCmp;
       return a.id.compareTo(b.id);
     });
-
-    _chatListSubject.add(chats);
+    return list;
   }
 
-  /// Возвращает актуальный снимок списка чатов для быстрой загрузки
-  List<UnifiedChat> snapshot() {
-    return _chats.values.toList()
-      ..sort((a, b) {
-        final timeCompare = (b.lastMessageTime?.compareTo(a.lastMessageTime ?? 0) ?? 0);
-        if (timeCompare != 0) {
-          return timeCompare;
-        }
-        return a.id.compareTo(b.id);
-      });
-  }
-
-  /// Останавливает агрегацию и освобождает ресурсы
+  /// Cancels all event subscriptions and closes the stream.
   void dispose() {
-    _chatListSubject.close();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    _controller.close();
   }
 }
