@@ -74,7 +74,7 @@ void main() {
       aggregator.addChat(lateChat);
       expect(aggregator.snapshot(), equals([lateChat, earlyChat]));
 
-      final futureEmit = aggregator.chatListStream.skip(1).first;
+      final futureEmit = aggregator.chatListStream.first;
 
       mockBackend1.emitEvent(BackendEvent.message(
         account: maxAccount,

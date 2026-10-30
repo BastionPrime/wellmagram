@@ -23,15 +23,8 @@ class ChatListAggregator {
   static String _chatKey(AccountKey account, String id) =>
       '${account.network.name}:${account.id}:$id';
 
-  /// Stream of sorted chat list updates.
-  ///
-  /// Emits the current snapshot on listen, then all subsequent updates.
-  Stream<List<UnifiedChat>> get chatListStream => _stream();
-
-  Stream<List<UnifiedChat>> _stream() async* {
-    yield snapshot();
-    yield* _controller.stream;
-  }
+  /// Stream of sorted chat list updates emitted whenever chats change.
+  Stream<List<UnifiedChat>> get chatListStream => _controller.stream;
 
   /// Adds or updates a chat in the in-memory aggregated model.
   void addChat(UnifiedChat chat) {
