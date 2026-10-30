@@ -1,8 +1,10 @@
+// ignore_for_file: depend_on_referenced_packages
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wellmagram/core/accounts/account_key.dart';
 import 'package:wellmagram/core/accounts/account_profile.dart';
 import 'package:wellmagram/core/accounts/account_registry.dart';
+import 'package:wellmagram/core/accounts/accounts_store.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'package:wellmagram/core/app/session_manager.dart';
 import 'package:wellmagram/core/backends/telegram/td_ghost.dart';
@@ -37,14 +39,16 @@ void main() {
 
   tearDown(() async => registry.dispose());
 
-  Widget screen() => MaterialApp(home: SettingsScreen(
-    registry: registry,
-    spoofProfiles: spoof,
-    prefs: prefs,
-    setMode: (mode) async => modeCalls.add(mode),
-    loadGhost: (_) async => ghost,
-    saveGhost: (_, value) async => ghost = value,
-  ));
+  Widget screen() => MaterialApp(
+        home: SettingsScreen(
+          registry: registry,
+          spoofProfiles: spoof,
+          prefs: prefs,
+          setMode: (mode) async => modeCalls.add(mode),
+          loadGhost: (_) async => ghost,
+          saveGhost: (_, value) async => ghost = value,
+        ),
+      );
 
   testWidgets('renders sections with an empty registry', (tester) async {
     await tester.pumpWidget(screen());
@@ -66,7 +70,12 @@ void main() {
 
   testWidgets('ghost toggle persists for selected account', (tester) async {
     const key = AccountKey(network: Network.telegram, id: 17);
-    await registry.add(const AccountProfile(key: key, displayName: 'Test', phone: '', updatedAt: 1));
+    await registry.add(const AccountProfile(
+      key: key,
+      displayName: 'Test',
+      phone: '',
+      updatedAt: 1,
+    ));
     await tester.pumpWidget(screen());
     await tester.tap(find.text('Ghost').last);
     await tester.pumpAndSettle();
