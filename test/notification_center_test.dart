@@ -1,11 +1,31 @@
 import 'package:wellmagram/core/accounts/account_key.dart';
+import 'package:wellmagram/core/backends/capabilities.dart';
+import 'package:wellmagram/core/backends/messenger_backend.dart';
 import 'package:wellmagram/core/notifications/notification_center.dart';
 import 'package:wellmagram/core/models/unified/backend_event.dart';
+import 'package:wellmagram/core/models/unified/unified_chat.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'package:test/test.dart';
 
 const max1 = AccountKey(network: Network.max, id: 1);
 const max2 = AccountKey(network: Network.max, id: 2);
+const tg1 = AccountKey(network: Network.telegram, id: 7);
+
+/// Сеть, которая не умеет ни отправки текста, ни звонков: проверяем, что
+/// быстрые действия не появляются там, где сеть их не поддерживает.
+const withoutText = Capabilities(
+  sendText: false,
+  sendMedia: false,
+  editText: false,
+  deleteMessages: false,
+  setReaction: false,
+  markRead: false,
+  setTyping: false,
+  downloadMedia: false,
+  calls: false,
+  pushRegistration: false,
+  ghostMode: false,
+);
 
 class RecordingPoster implements NotificationPoster {
   final posted = <NotificationRequest>[];
@@ -25,6 +45,106 @@ class RecordingPoster implements NotificationPoster {
   @override
   Future<void> setBadge(int count) async {
     badges.add(count);
+  }
+}
+
+/// Минимальный бэкенд, который записывает доставленные быстрые ответы:
+/// проверяем маршрутизацию (в какую сеть ушёл ответ), а не транспорт.
+class RecordingBackend implements MessengerBackend {
+  @override
+  final AccountKey account;
+
+  @override
+  final Capabilities capabilities;
+
+  /// Доставленные ответы в виде `chatId|text`.
+  final sent = <String>[];
+
+  RecordingBackend({required this.account, required this.capabilities});
+
+  @override
+  BackendState state = BackendState.disconnected;
+
+  @override
+  Stream<BackendEvent> get events => const Stream.empty();
+
+  @override
+  Stream<BackendState> get stateChanges => const Stream.empty();
+
+  @override
+  Future<List<UnifiedChat>> chats() async => const [];
+
+  @override
+  Future<List<UnifiedMessage>> history(String chatId, {int limit = 50}) async =>
+      const [];
+
+  @override
+  Future<SendResult> sendText(String chatId, String text) async {
+    sent.add('$chatId|$text');
+    return SendResult(messageId: 'm:${sent.length}', timestamp: 1);
+  }
+
+  @override
+  Future<void> sendMedia(String chatId, String filePath) async {}
+
+  @override
+  Future<void> editText(String chatId, String messageId, String newText) async {}
+
+  @override
+  Future<void> deleteMessages(String chatId, List<String> messageIds) async {}
+
+  @override
+  Future<void> setReaction(String chatId, String messageId, String reaction) async {}
+
+  @override
+  Future<void> markRead(String chatId) async {}
+
+  @override
+  Future<void> setTyping(String chatId, bool typing) async {}
+
+  @override
+  Future<void> downloadMedia(String messageId, String targetPath) async {}
+
+  @override
+  Future<void> registerPush(String pushToken) async {}
+
+  @override
+  Future<void> unregisterPush(String pushToken) async {}
+
+  @override
+  Future<void> setGhostMode(bool enabled) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// Реестр живых сессий аккаунтов для шва центра.
+class BackendRegistry {
+  BackendRegistry(this._backends);
+
+  final List<MessengerBackend> _backends;
+
+  MessengerBackend? call(AccountKey account) {
+    for (final backend in _backends) {
+      if (backend.account == account) return backend;
+    }
+    return null;
+  }
+}
+
+/// Записывает отказы от звонков, которые центр направил в управление.
+class RecordingCallController implements CallController {
+  final declined = <String>[];
+
+  @override
+  Future<void> declineCall(AccountKey account, String chatId) async {
+    declined.add('${account.storageId}|$chatId');
   }
 }
 
@@ -496,6 +616,317 @@ void main() {
       await center.handle(message(chatId: 'c:20'));
       await center.handle(chatReadEvent(chatId: 'c:10'));
       expect(poster.badges, [1, 2, 1]);
+    });
+  });
+
+  group('channels and priorities (Т-3.6)', () {
+    test('channel priorities are ordered calls > messages > service', () {
+      expect(
+        NotificationChannel.calls.priority,
+        greaterThan(NotificationChannel.messages.priority),
+      );
+      expect(
+        NotificationChannel.messages.priority,
+        greaterThan(NotificationChannel.service.priority),
+      );
+    });
+
+    test('the active set is ordered by channel priority', () async {
+      await center.handle(message());
+      await center.handle(callEvent());
+      await center.notifyService(account: max1, title: 'Соединение потеряно');
+
+      expect(
+        center.activeNotifications.map((r) => r.channel).toList(),
+        [
+          NotificationChannel.calls,
+          NotificationChannel.messages,
+          NotificationChannel.service,
+        ],
+      );
+    });
+
+    test('the service notice is per account and never touches the badge',
+        () async {
+      final request = await center.notifyService(
+        account: max1,
+        title: 'MAX отключён',
+        body: 'нужен повторный вход',
+      );
+      expect(request.channel, NotificationChannel.service);
+      expect(request.groupKey, 'max:1:service');
+      expect(request.body, 'нужен повторный вход');
+      expect(center.badge, 0);
+      expect(center.unreadInChat('max:1:service'), 0);
+      expect(poster.badges, isEmpty, reason: 'служебное — не непрочитанное');
+    });
+
+    test('a service notice for another account is its own group', () async {
+      await center.notifyService(account: max1, title: 'a');
+      await center.notifyService(account: max2, title: 'b');
+      expect(
+        center.activeNotifications.map((r) => r.groupKey).toSet(),
+        {'max:1:service', 'max:2:service'},
+      );
+    });
+
+    test('chatRead removes the notifications of the group from the active set',
+        () async {
+      await center.handle(message());
+      await center.handle(callEvent());
+      expect(center.activeNotifications, hasLength(2));
+      await center.handle(chatReadEvent());
+      expect(center.activeNotifications, isEmpty);
+    });
+
+    test('chatOpened removes the group from the active set', () async {
+      await center.handle(message(chatId: 'c:20'));
+      await center.chatOpened(max1, 'c:20');
+      expect(center.activeNotifications, isEmpty);
+    });
+  });
+
+  group('quick reply routing (Т-3.6)', () {
+    late RecordingBackend maxBackend;
+    late RecordingBackend tgBackend;
+    late NotificationCenter routing;
+
+    setUp(() {
+      maxBackend = RecordingBackend(account: max1, capabilities: Capabilities.max);
+      tgBackend =
+          RecordingBackend(account: tg1, capabilities: Capabilities.telegram);
+      routing = NotificationCenter(
+        poster: poster,
+        lookupBackend: BackendRegistry([maxBackend, tgBackend]).call,
+      );
+    });
+
+    test('a messages notification offers the reply action on both networks',
+        () async {
+      final onMax = await routing.handle(message());
+      final onTg = await routing.handle(message(account: tg1, chatId: 'c:7'));
+      expect(onMax!.actions.map((a) => a.kind), [NotificationActionKind.reply]);
+      expect(onTg!.actions.map((a) => a.kind), [NotificationActionKind.reply]);
+      expect(routing.actionsFor(onTg), hasLength(1));
+    });
+
+    test('a telegram notification replies into the telegram backend',
+        () async {
+      final request = await routing.handle(message(account: tg1, chatId: 'c:7'));
+      final reply = routing.quickReplyFor(request!);
+      expect(reply, isNotNull);
+      await reply!('ответ в тг');
+      expect(tgBackend.sent, ['c:7|ответ в тг']);
+      expect(maxBackend.sent, isEmpty);
+    });
+
+    test('a max notification replies into the max backend', () async {
+      final request = await routing.handle(message(chatId: 'c:42'));
+      await routing.quickReplyFor(request!)!('ответ в max');
+      expect(maxBackend.sent, ['c:42|ответ в max']);
+      expect(tgBackend.sent, isEmpty);
+    });
+
+    test('the callback returns the send result of the routed backend',
+        () async {
+      final request = await routing.handle(message());
+      final result = await routing.quickReplyFor(request!)!('ок');
+      expect(result.messageId, 'm:1');
+    });
+
+    test('no callback without a live backend for the account', () async {
+      final offline = NotificationCenter(poster: poster);
+      final request = await offline.handle(message());
+      expect(offline.quickReplyFor(request!), isNull,
+          reason: 'живой сессии нет — отвечать некуда');
+      expect(
+        offline.actionsFor(request).map((a) => a.kind),
+        [NotificationActionKind.reply],
+        reason: 'возможности сети известны и без живой сессии',
+      );
+    });
+
+    test('no reply action for a network that cannot send text', () async {
+      final mute = RecordingBackend(account: max2, capabilities: withoutText);
+      final limited = NotificationCenter(
+        poster: poster,
+        lookupBackend: BackendRegistry([mute]).call,
+      );
+      final request = await limited.handle(message(account: max2));
+      expect(request!.actions, isEmpty);
+      expect(limited.quickReplyFor(request), isNull);
+    });
+  });
+
+  group('call decline gated by capabilities (Т-3.6)', () {
+    late RecordingCallController calls;
+    late NotificationCenter withCalls;
+
+    setUp(() {
+      calls = RecordingCallController();
+      withCalls = NotificationCenter(
+        poster: poster,
+        lookupBackend: BackendRegistry([
+          RecordingBackend(account: max1, capabilities: Capabilities.max),
+          RecordingBackend(account: tg1, capabilities: Capabilities.telegram),
+        ]).call,
+        callController: calls,
+      );
+    });
+
+    test('a MAX call offers decline and routes it to the call controller',
+        () async {
+      final request = await withCalls.handle(callEvent());
+      expect(
+        request!.actions.map((a) => a.kind),
+        [NotificationActionKind.declineCall],
+      );
+      expect(await withCalls.declineCall(request), isTrue);
+      expect(calls.declined, ['max:1|c:10']);
+      expect(poster.cancelledGroups, contains('max:1:c:10'));
+      expect(withCalls.activeNotifications, isEmpty);
+    });
+
+    test('decline is invisible for a call-less network (telegram)', () async {
+      final request = await withCalls.handle(callEvent(account: tg1, chatId: 'c:7'));
+      expect(request!.actions, isEmpty, reason: 'сеть без звонков');
+      expect(withCalls.actionsFor(request), isEmpty);
+      expect(await withCalls.declineCall(request), isFalse);
+      expect(calls.declined, isEmpty);
+      expect(poster.cancelledGroups, isEmpty);
+    });
+
+    test('decline is invisible when call control is not wired', () async {
+      final noController = NotificationCenter(
+        poster: poster,
+        lookupBackend: BackendRegistry([
+          RecordingBackend(account: max1, capabilities: Capabilities.max),
+        ]).call,
+      );
+      final request = await noController.handle(callEvent());
+      expect(request!.actions, isEmpty);
+      expect(await noController.declineCall(request), isFalse);
+    });
+
+    test('an account without a live session falls back to the network preset',
+        () async {
+      final offline = NotificationCenter(
+        poster: poster,
+        lookupBackend: BackendRegistry(const []).call,
+        callController: calls,
+      );
+      final tgCall = await offline.handle(callEvent(account: tg1, chatId: 'c:7'));
+      final maxCall = await offline.handle(callEvent());
+      expect(tgCall!.actions, isEmpty, reason: 'preset telegram: calls = false');
+      expect(
+        maxCall!.actions.map((a) => a.kind),
+        [NotificationActionKind.declineCall],
+        reason: 'preset max: calls = true',
+      );
+    });
+
+    test('decline never touches the badge or the unread counters', () async {
+      final request = await withCalls.handle(callEvent());
+      await withCalls.declineCall(request!);
+      expect(withCalls.badge, 0);
+      expect(poster.badges, isEmpty);
+    });
+
+    test('decline on a messages notification is a no-op', () async {
+      final request = await withCalls.handle(message());
+      expect(await withCalls.declineCall(request!), isFalse);
+      expect(calls.declined, isEmpty);
+    });
+  });
+
+  group('dedup window (Т-3.6)', () {
+    late NotificationCenter deduped;
+
+    setUp(() {
+      deduped = NotificationCenter(
+        poster: poster,
+        dedupWindow: const Duration(minutes: 5),
+      );
+    });
+
+    test('a replay of the same messageId inside the window is dropped',
+        () async {
+      final event = message(messageId: 'm:42', timestamp: 1000);
+      final first = await deduped.handle(event);
+      final replay = await deduped.handle(event);
+      expect(first, isNotNull);
+      expect(replay, isNull, reason: 'повтор того же сообщения не событие');
+      expect(deduped.badge, 1);
+      expect(deduped.unreadInChat('max:1:c:10'), 1);
+      expect(poster.posted, hasLength(1));
+    });
+
+    test('distinct messageIds in one chat all count', () async {
+      await deduped.handle(message(messageId: 'm:1'));
+      await deduped.handle(message(messageId: 'm:2'));
+      expect(deduped.badge, 2);
+      expect(poster.posted, hasLength(2));
+    });
+
+    test('a repeat after the window counts again', () async {
+      await deduped.handle(message(messageId: 'm:42', timestamp: 1000));
+      final later = await deduped.handle(
+        message(messageId: 'm:42', timestamp: 1000 + 5 * 60 * 1000),
+      );
+      expect(later!.body, '2 новых сообщений');
+      expect(deduped.badge, 2);
+    });
+
+    test('the window restarts from every repeat (burst suppression)', () async {
+      await deduped.handle(message(messageId: 'm:7', timestamp: 0));
+      expect(
+        await deduped.handle(message(messageId: 'm:7', timestamp: 60000)),
+        isNull,
+      );
+      expect(
+        await deduped.handle(message(messageId: 'm:7', timestamp: 120000)),
+        isNull,
+      );
+      expect(
+        await deduped.handle(message(messageId: 'm:7', timestamp: 420001)),
+        isNotNull,
+      );
+      expect(deduped.badge, 2);
+    });
+
+    test('the same messageId in another chat or account is not a duplicate',
+        () async {
+      await deduped.handle(message(messageId: 'm:5', chatId: 'c:10'));
+      expect(
+        await deduped.handle(message(messageId: 'm:5', chatId: 'c:20')),
+        isNotNull,
+      );
+      expect(
+        await deduped.handle(message(messageId: 'm:5', account: max2)),
+        isNotNull,
+      );
+      expect(deduped.badge, 3);
+    });
+
+    test('an event without messageId is never deduplicated', () async {
+      final bare = BackendEvent(
+        kind: BackendEventKind.newMessage,
+        account: max1,
+        chatId: 'c:10',
+        timestamp: 1000,
+      );
+      expect(await deduped.handle(bare), isNotNull);
+      expect(await deduped.handle(bare), isNotNull);
+      expect(deduped.badge, 2);
+    });
+
+    test('the default center keeps the OPE-3751 contract (no window)',
+        () async {
+      final event = message(messageId: 'm:42', timestamp: 1000);
+      await center.handle(event);
+      final replay = await center.handle(event);
+      expect(replay, isNotNull);
+      expect(center.badge, 2, reason: 'окно выключено — считает шина событий');
     });
   });
 }
