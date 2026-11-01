@@ -57,6 +57,8 @@ void main() {
       onMute: (_) async { muteCalls++; },
       onArchive: (_) async {},
     )));
+    await tester.drag(find.text('One'), const Offset(300, 0));
+    await tester.pump();
     expect(find.byTooltip('Прочитать'), findsOneWidget);
     expect(find.byTooltip('Без звука'), findsNothing);
     expect(find.byTooltip('В архив'), findsNothing);
