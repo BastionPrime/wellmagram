@@ -1,3 +1,7 @@
+// The SDK package is provided via dependency_overrides (workspace-internal
+// resolution, see pubspec.yaml); an explicit dependency entry is impossible,
+// so this import's lint is suppressed.
+// ignore: depend_on_referenced_packages
 import 'package:flutter/material.dart';
 
 import '../../core/accounts/account_profile.dart';
@@ -115,9 +119,6 @@ class ChatListScreen extends StatelessWidget {
     }
     return tile;
   }
-
-  // Kept as a small seam for future muted-state derivation.
-  bool _muted(UnifiedChat chat) => mutedChatKeys.contains(_key(chat));
 
   String _initial(String value) => value.isEmpty ? '?' : String.fromCharCode(value.runes.first).toUpperCase();
 
