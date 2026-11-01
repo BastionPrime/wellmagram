@@ -65,6 +65,8 @@ class ChatListScreen extends StatelessWidget {
 
   bool _isPinned(UnifiedChat chat) => pinnedChatKeys.contains(_key(chat));
 
+  bool _isMuted(UnifiedChat chat) => mutedChatKeys.contains(_key(chat));
+
   Widget _tile(BuildContext context, UnifiedChat chat) {
     final account = accounts[chat.account.storageId];
     final caps = capabilities[chat.account.storageId] ??
@@ -93,7 +95,7 @@ class ChatListScreen extends StatelessWidget {
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         if (chat.unreadCount > 0)
           CircleAvatar(radius: 12, child: Text('${chat.unreadCount}', style: const TextStyle(fontSize: 11))),
-        if (mutedChatKeys.contains(_key(chat)))
+        if (_isMuted(chat))
           const Icon(Icons.volume_off, size: 18),
         if (account != null) ...[
           const SizedBox(width: 8),
@@ -114,7 +116,8 @@ class ChatListScreen extends StatelessWidget {
     return tile;
   }
 
-  bool _muted(UnifiedChat chat) => false;
+  // Kept as a small seam for future muted-state derivation.
+  bool _muted(UnifiedChat chat) => mutedChatKeys.contains(_key(chat));
 
   String _initial(String value) => value.isEmpty ? '?' : String.fromCharCode(value.runes.first).toUpperCase();
 

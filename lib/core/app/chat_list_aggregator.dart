@@ -25,6 +25,7 @@ class ChatListAggregator implements ChatListSource {
       '${account.network.name}:${account.id}:$id';
 
   /// Stream of sorted chat list updates emitted whenever chats change.
+  @override
   Stream<List<UnifiedChat>> get chatListStream => _controller.stream;
 
   /// Adds or updates a chat in the in-memory aggregated model.
