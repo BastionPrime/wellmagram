@@ -18,6 +18,8 @@ class Capabilities {
   final bool calls;
   final bool pushRegistration;
   final bool ghostMode;
+  final bool setChatMuted;
+  final bool archiveChat;
 
   const Capabilities({
     required this.sendText,
@@ -31,6 +33,8 @@ class Capabilities {
     required this.calls,
     required this.pushRegistration,
     required this.ghostMode,
+    this.setChatMuted = false,
+    this.archiveChat = false,
   });
 
   /// MAX protocol (upstream Komet modules) supports all listed operations.

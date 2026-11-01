@@ -10,8 +10,9 @@ import '../accounts/account_key.dart';
 import '../backends/messenger_backend.dart';
 import '../models/unified/backend_event.dart';
 import '../models/unified/unified_chat.dart';
+import 'chat_list_source.dart';
 
-class ChatListAggregator {
+class ChatListAggregator implements ChatListSource {
   final List<MessengerBackend> _backends;
   final Map<String, UnifiedChat> _chats = {};
   final StreamController<List<UnifiedChat>> _controller =
@@ -24,6 +25,7 @@ class ChatListAggregator {
       '${account.network.name}:${account.id}:$id';
 
   /// Stream of sorted chat list updates emitted whenever chats change.
+  @override
   Stream<List<UnifiedChat>> get chatListStream => _controller.stream;
 
   /// Adds or updates a chat in the in-memory aggregated model.
@@ -72,6 +74,7 @@ class ChatListAggregator {
   /// Returns a deterministic snapshot of the chat list for cold starts.
   ///
   /// Sorted descending by [UnifiedChat.lastEventTime], then ascending by [UnifiedChat.id].
+  @override
   List<UnifiedChat> snapshot() {
     final list = _chats.values.toList();
     list.sort((a, b) {
