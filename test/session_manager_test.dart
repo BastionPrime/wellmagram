@@ -262,9 +262,13 @@ void main() {
     await h.manager.dispose();
   });
 
-  test('telegram accounts are rejected explicitly', () async {
+  test('telegram sessions start through the same manager layer', () async {
     final h = Harness(SessionMode.switchMode);
-    expect(h.manager.start(tg3), throwsUnsupportedError);
+    await h.login(tg3, 'token-3');
+    final backend = await h.manager.start(tg3);
+    await pump();
+    expect(h.manager.activeKey, tg3);
+    expect(h.manager.backendOf(tg3), same(backend));
     await h.manager.dispose();
   });
 
