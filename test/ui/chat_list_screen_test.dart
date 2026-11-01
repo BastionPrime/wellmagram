@@ -68,6 +68,35 @@ void main() {
     expect(muteCalls, 0);
   });
 
+  testWidgets('exposes mute and archive only when capabilities allow', (tester) async {
+    var muteCalls = 0;
+    var archiveCalls = 0;
+    final source = FixtureAggregator([chat('one', 'One', 1)]);
+    await tester.pumpWidget(MaterialApp(home: ChatListScreen(
+      aggregator: source,
+      capabilities: {'max:7': const Capabilities(
+        sendText: false, sendMedia: false, editText: false, deleteMessages: false,
+        setReaction: false, markRead: false, setTyping: false, downloadMedia: false,
+        calls: false, pushRegistration: false, ghostMode: false,
+        setChatMuted: true, archiveChat: true,
+      )},
+      onMarkRead: (_) async {},
+      onMute: (_) async { muteCalls++; },
+      onArchive: (_) async { archiveCalls++; },
+    )));
+    await tester.drag(find.text('One'), const Offset(300, 0));
+    await tester.pump();
+    expect(find.byTooltip('Прочитать'), findsNothing);
+    expect(find.byTooltip('Без звука'), findsOneWidget);
+    expect(find.byTooltip('В архив'), findsOneWidget);
+    await tester.tap(find.byTooltip('Без звука'));
+    await tester.pump();
+    expect(muteCalls, 1);
+    await tester.tap(find.byTooltip('В архив'));
+    await tester.pump();
+    expect(archiveCalls, 1);
+  });
+
   testWidgets('shows empty state while remaining refreshable', (tester) async {
     await tester.pumpWidget(MaterialApp(home: ChatListScreen(aggregator: FixtureAggregator([]))));
     expect(find.text('Нет чатов'), findsOneWidget);

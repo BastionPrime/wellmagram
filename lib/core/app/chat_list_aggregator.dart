@@ -73,8 +73,7 @@ class ChatListAggregator implements ChatListSource {
 
   /// Returns a deterministic snapshot of the chat list for cold starts.
   ///
-  /// Sorted descending by [UnifiedChat.lastEventTime], then ascending by id.
-  @override
+  /// Sorted descending by [UnifiedChat.lastEventTime], then ascending by [UnifiedChat.id].
   List<UnifiedChat> snapshot() {
     final list = _chats.values.toList();
     list.sort((a, b) {
@@ -86,11 +85,11 @@ class ChatListAggregator implements ChatListSource {
   }
 
   /// Cancels all event subscriptions and closes the stream.
-  Future<void> dispose() async {
+  void dispose() {
     for (final sub in _subscriptions) {
-      await sub.cancel();
+      sub.cancel();
     }
     _subscriptions.clear();
-    await _controller.close();
+    _controller.close();
   }
 }
