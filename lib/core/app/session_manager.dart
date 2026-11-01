@@ -25,9 +25,9 @@ enum SessionMode { switchMode, parallel }
 
 class SessionManager {
   final SessionMode mode;
-  final MaxBackendFactory backendFactory;
+  final MessengerBackendFactory backendFactory;
 
-  final _backends = <AccountKey, MaxBackend>{};
+  final _backends = <AccountKey, MessengerBackend>{};
   final _activeController = StreamController<AccountKey?>.broadcast();
   AccountKey? _activeKey;
   bool _disposed = false;
@@ -35,32 +35,21 @@ class SessionManager {
 
   SessionManager({
     this.mode = SessionMode.switchMode,
-    required MaxBackendFactory factory,
+    required MessengerBackendFactory factory,
   }) : backendFactory = factory;
 
   Stream<AccountKey?> get activeChanges => _activeController.stream;
-
   AccountKey? get activeKey => _activeKey;
-
   bool get isParallel => mode == SessionMode.parallel;
-
   List<AccountKey> get liveAccounts => List.unmodifiable(_backends.keys);
-
-  MaxBackend? backendOf(AccountKey account) => _backends[account];
-
+  MessengerBackend? backendOf(AccountKey account) => _backends[account];
   bool get isGhostMode => _ghostMode;
 
-  /// Starts the session for the account; in switch mode any previous live
-  /// session is paused first (one live MAX session), in parallel mode it
-  /// stays online. Returns the started backend.
-  Future<MaxBackend> start(AccountKey account) async {
+  Future<MessengerBackend> start(AccountKey account) async {
     _requireAlive();
-    if (account.network != Network.max) {
-      throw UnsupportedError(
-        'SessionManager Т-1.7: MAX-менеджер, tg-сессиями управляет Т-2.x',
-      );
-    }
-    if (mode == SessionMode.switchMode && _activeKey != null && _activeKey != account) {
+    if (mode == SessionMode.switchMode &&
+        _activeKey != null &&
+        _activeKey != account) {
       await pause(_activeKey!);
     }
     var backend = _backends[account];
@@ -74,20 +63,19 @@ class SessionManager {
     return backend;
   }
 
-  Future<void> _startBackend(MaxBackend backend) async {
+  Future<void> _startBackend(MessengerBackend backend) async {
     if (backend.state == BackendState.disconnected) {
-      await backend.connectAndLogin();
+      if (backend is MaxBackend) {
+        await backend.connectAndLogin();
+      } else {
+        await backend.resume();
+      }
     } else {
       await backend.resume();
     }
-    if (_ghostMode) {
-      await backend.setGhostMode(true);
-    }
+    if (_ghostMode) await backend.setGhostMode(true);
   }
 
-  /// The overlay callback: `void Function(int? accountId)` — MAX id in,
-    /// session out. `null` (the overlay's "no account" signal) only drops
-  /// the active marker without touching sessions.
   Future<void> onSwitcherSelected(int? accountId) async {
     _requireAlive();
     if (accountId == null) {
@@ -116,10 +104,6 @@ class SessionManager {
     _activeController.add(account);
   }
 
-  /// Ghost mode applies to every live session now and to any session
-  /// started later (review note for Т-1.7: a session raised while ghost is
-  /// on must come up with pingInteractive=false — here it is applied right
-  /// after resume, before the account becomes active).
   Future<void> setGhostMode(bool enabled) async {
     _requireAlive();
     _ghostMode = enabled;
@@ -130,9 +114,6 @@ class SessionManager {
     }
   }
 
-  /// Full account removal (plan 4.7 п.8): session + credentials + spoof
-  /// profile all go away together. The registry remove (T-1.1) and
-  /// database/media removal (T-1.5) are orchestrated by the caller.
   Future<bool> removeAccount(
     AccountKey account, {
     required CredentialStore credentials,
@@ -140,9 +121,7 @@ class SessionManager {
   }) async {
     _requireAlive();
     final backend = _backends.remove(account);
-    if (backend != null) {
-      await backend.dispose();
-    }
+    if (backend != null) await backend.dispose();
     if (_activeKey == account) {
       _activeKey = null;
       _activeController.add(null);
@@ -155,18 +134,14 @@ class SessionManager {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    for (final backend in _backends.values) {
-      await backend.dispose();
-    }
+    for (final backend in _backends.values) await backend.dispose();
     _backends.clear();
     await _activeController.close();
   }
 
   void _requireAlive() {
-    if (_disposed) {
-      throw StateError('SessionManager: disposed');
-    }
+    if (_disposed) throw StateError('SessionManager: disposed');
   }
 }
 
-typedef MaxBackendFactory = MaxBackend Function(AccountKey account);
+typedef MessengerBackendFactory = MessengerBackend Function(AccountKey account);
