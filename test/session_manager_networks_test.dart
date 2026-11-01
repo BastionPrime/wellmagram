@@ -9,12 +9,15 @@ import 'dart:async';
 import 'package:wellmagram/core/accounts/account_key.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'package:wellmagram/core/app/session_manager.dart';
+import 'package:wellmagram/core/backends/capabilities.dart';
 import 'package:wellmagram/core/backends/messenger_backend.dart';
 import 'package:wellmagram/core/backends/telegram/td_bridge.dart';
 import 'package:wellmagram/core/backends/telegram/td_client_seam.dart';
 import 'package:wellmagram/core/backends/telegram/td_ghost.dart';
 import 'package:wellmagram/core/backends/telegram/td_sessions.dart';
 import 'package:wellmagram/core/backends/telegram/telegram_backend.dart';
+import 'package:wellmagram/core/models/unified/backend_event.dart';
+import 'package:wellmagram/core/models/unified/unified_chat.dart';
 import 'package:test/test.dart';
 
 import 'mock_td_client.dart';
@@ -180,9 +183,9 @@ void main() {
     final tgBackend = await h.manager.start(tgB);
     await pump();
 
-    expect(maxBackend.lastGhost, isTrue,
+    expect(h.backends[maxA]!.lastGhost, isTrue,
         reason: 'ghost-режим должен применяться к MAX');
-    expect(tgBackend.lastGhost, isTrue,
+    expect(h.backends[tgB]!.lastGhost, isTrue,
         reason: 'ghost-режим должен применяться к TG');
     expect(h.manager.isGhostMode, isTrue);
     await h.manager.dispose();
