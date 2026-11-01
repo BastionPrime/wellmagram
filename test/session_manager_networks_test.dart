@@ -203,7 +203,7 @@ void main() {
 
   group('TelegramBackend adapter', () {
     test('ghost mode delegates to TdGhost with full settings', () async {
-      final mock = MockTdClient();
+      final mock = MockTdClient()..autoAnswer = true;
       final bridge = TdBridge(client: mock);
       final ghost = TdGhost(bridge: bridge);
       final session = TdLiveSession(bridge: bridge, ghost: ghost);
@@ -219,7 +219,7 @@ void main() {
     });
 
     test('markRead is suppressed while ghost read is on', () async {
-      final mock = MockTdClient();
+      final mock = MockTdClient()..autoAnswer = true;
       final bridge = TdBridge(client: mock);
       final ghost = TdGhost(bridge: bridge);
       final session = TdLiveSession(bridge: bridge, ghost: ghost);
@@ -252,6 +252,7 @@ void main() {
       mock.autoAnswer = true;
       await backend.resume();
       expect(backend.state, BackendState.online);
+      await pump();
 
       expect(states, containsAll([BackendState.paused, BackendState.online]));
       await sub.cancel();
