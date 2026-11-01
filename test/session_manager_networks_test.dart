@@ -12,7 +12,6 @@ import 'package:wellmagram/core/app/session_manager.dart';
 import 'package:wellmagram/core/backends/capabilities.dart';
 import 'package:wellmagram/core/backends/messenger_backend.dart';
 import 'package:wellmagram/core/backends/telegram/td_bridge.dart';
-import 'package:wellmagram/core/backends/telegram/td_client_seam.dart';
 import 'package:wellmagram/core/backends/telegram/td_ghost.dart';
 import 'package:wellmagram/core/backends/telegram/td_sessions.dart';
 import 'package:wellmagram/core/backends/telegram/telegram_backend.dart';
@@ -179,8 +178,8 @@ void main() {
     final h = NetworksHarness(SessionMode.parallel);
     await h.manager.setGhostMode(true);
 
-    final maxBackend = await h.manager.start(maxA);
-    final tgBackend = await h.manager.start(tgB);
+    await h.manager.start(maxA);
+    await h.manager.start(tgB);
     await pump();
 
     expect(h.backends[maxA]!.lastGhost, isTrue,
