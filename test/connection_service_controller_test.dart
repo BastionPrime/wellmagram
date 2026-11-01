@@ -59,7 +59,7 @@ class FakeSessionHarness {
     },
   );
 
-  Future<MaxBackend> login(AccountKey account, String token) async {
+  Future<MessengerBackend> login(AccountKey account, String token) async {
     if (!secureStorage.data.containsKey('cred:${account.storageId}')) {
       await credentials.saveToken(account, token);
     }

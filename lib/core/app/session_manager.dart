@@ -134,7 +134,9 @@ class SessionManager {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    for (final backend in _backends.values) await backend.dispose();
+    for (final backend in _backends.values) {
+      await backend.dispose();
+    }
     _backends.clear();
     await _activeController.close();
   }
