@@ -74,6 +74,7 @@ class ChatListAggregator implements ChatListSource {
   /// Returns a deterministic snapshot of the chat list for cold starts.
   ///
   /// Sorted descending by [UnifiedChat.lastEventTime], then ascending by [UnifiedChat.id].
+  @override
   List<UnifiedChat> snapshot() {
     final list = _chats.values.toList();
     list.sort((a, b) {
