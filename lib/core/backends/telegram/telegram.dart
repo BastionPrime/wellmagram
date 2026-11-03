@@ -15,3 +15,4 @@ export 'td_messages.dart';
 export 'td_push.dart';
 export 'td_sessions.dart';
 export 'td_voice.dart';
+export 'telegram_backend.dart';
