@@ -79,6 +79,7 @@ void main() {
       backend.controller.add(BackendEvent.message(account: account, chatId: 'chat', messageId: '1', senderId: 'friend', text: 'Reply', timestamp: 2));
       await tester.pump();
       expect(find.text('Reply'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
       await backend.dispose();
     });
   }
