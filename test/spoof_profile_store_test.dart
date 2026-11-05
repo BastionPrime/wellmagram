@@ -167,6 +167,25 @@ void main() {
       expect(await store.load(max1), isNull);
     });
 
+    test('regenerateFor stores the deterministic pick and is stable', () async {
+      final fresh = await store.regenerateFor(max1);
+      expect((await store.load(max1))!.deviceName, fresh.deviceName);
+      final again = await store.regenerateFor(max1);
+      expect(again.deviceName, fresh.deviceName);
+      expect(again.osVersion, fresh.osVersion);
+    });
+
+    test('regeneration avoids taken models in stable order', () async {
+      final preferred = store.presetFor(max1);
+      final first = await store.regenerate(max1,
+          usedDeviceNames: {preferred.deviceName});
+      final next = await store.regenerate(max1,
+          usedDeviceNames: {preferred.deviceName});
+      expect(first.deviceName, isNot(preferred.deviceName));
+      expect(next.deviceName, first.deviceName);
+      expect(next.osVersion, first.osVersion);
+    });
+
     test('regenerate replaces the profile (user action, S3)', () async {
       await store.save(max1, store.generate());
       final old = await store.load(max1);

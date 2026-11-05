@@ -165,6 +165,38 @@ void main() {
 
     Future<void> seedInitial() => store.save(acc1, initial);
 
+    test('session loader creates a stable preset only when absent', () async {
+      final first = await bridge.loadSessionData(acc1);
+      expect(first!['device_name'], store.presetFor(acc1).deviceName);
+      expect(first['os_version'], store.presetFor(acc1).osVersion);
+      final saved = await store.load(acc1);
+      expect(saved, isNotNull);
+      final second = await bridge.loadSessionData(acc1);
+      expect(second!['device_name'], first['device_name']);
+      expect(second['os_version'], first['os_version']);
+      expect(second['device_id'], first['device_id']);
+    });
+
+    test('account creation and regeneration keep a stable model/os pair',
+        () async {
+      const other = AccountKey(network: Network.max, id: 2);
+      final first = await bridge.createProfile(acc1);
+      final second = await bridge.createProfile(other);
+      expect(first.deviceName, store.presetFor(acc1).deviceName);
+      expect(first.osVersion, store.presetFor(acc1).osVersion);
+      expect(second.deviceName, isNot(first.deviceName));
+      expect(second.osVersion, store.presetFor(other).osVersion);
+
+      final loaded = await bridge.loadSessionData(acc1);
+      expect(loaded!['device_name'], first.deviceName);
+      expect(loaded['os_version'], first.osVersion);
+      final regenerated = await bridge.regenerateProfile(acc1);
+      expect(regenerated.deviceName, first.deviceName);
+      expect(regenerated.osVersion, first.osVersion);
+      expect(regenerated.deviceId, isNot(first.deviceId));
+      expect((await bridge.loadSessionData(acc1))!['device_name'], first.deviceName);
+    });
+
     test('loadSessionData reads a snapshot; saving a new profile does not '
         'change the previously returned map', () async {
       await seedInitial();
@@ -258,7 +290,7 @@ void main() {
 
       // Removing one account's profile leaves the other intact.
       await bridge.remove(a);
-      expect(await bridge.loadSessionData(a), isNull);
+      expect(await store.load(a), isNull);
       expect((await bridge.loadSessionData(b))!['device_name'], 'Second');
     });
   });
