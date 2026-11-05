@@ -63,7 +63,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _loading = false;
       });
       if (widget.backend.capabilities.markRead) await widget.backend.markRead(widget.chat.id);
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted && generation == _generation) setState(() { _error = error.toString(); _loading = false; });
     }
   }
@@ -95,7 +95,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_busy) return;
     setState(() { _busy = true; _error = null; });
     try { await operation(); }
-    catch (error) { if (mounted) setState(() => _error = error.toString()); }
+    on Object catch (error) { if (mounted) setState(() => _error = error.toString()); }
     finally { if (mounted) setState(() => _busy = false); }
   }
 

@@ -27,6 +27,8 @@ class FakeBackend implements MessengerBackend {
   @override
   Stream<BackendState> get stateChanges => const Stream.empty();
   @override
+  Future<List<UnifiedChat>> chats() async => [];
+  @override
   Future<List<UnifiedMessage>> history(String chatId, {int limit = 50}) async => messages;
   @override
   Future<SendResult> sendText(String chatId, String text) async {
