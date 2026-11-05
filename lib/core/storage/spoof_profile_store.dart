@@ -65,11 +65,19 @@ class SpoofProfileStore {
     return spoofDevicePresets[index];
   }
 
-  /// Generates a profile from the deterministic preset pick for [account]
-  /// (stable per key, see [presetFor]); same contract as [generate].
+  /// Generates a profile from the deterministic preset pick for [account].
+  /// If that model is already taken, scan the table in a stable order.
   SpoofProfile generateFor(AccountKey account,
       {Set<String> usedDeviceNames = const {}}) {
-    final preset = presetFor(account);
+    final start = presetIndexForAccountKey(
+        storageKey(account), spoofDevicePresets.length);
+    var preset = spoofDevicePresets[start];
+    for (var offset = 1;
+        usedDeviceNames.contains(preset.deviceName) &&
+            offset < spoofDevicePresets.length;
+        offset++) {
+      preset = spoofDevicePresets[(start + offset) % spoofDevicePresets.length];
+    }
     final shortLocale = preset.locale.split(RegExp(r'[-_]')).first;
     return SpoofProfile(
       enabled: true,
@@ -147,16 +155,13 @@ class SpoofProfileStore {
   Future<SpoofProfile> regenerate(
     AccountKey account, {
     Set<String> usedDeviceNames = const {},
-  }) async {
-    final profile = generate(usedDeviceNames: usedDeviceNames);
-    await save(account, profile);
-    return profile;
-  }
+  }) => regenerateFor(account, usedDeviceNames: usedDeviceNames);
 
   /// Regenerates from the deterministic preset pick for [account] and
   /// stores it; returns the profile.
-  Future<SpoofProfile> regenerateFor(AccountKey account) async {
-    final profile = generateFor(account);
+  Future<SpoofProfile> regenerateFor(AccountKey account,
+      {Set<String> usedDeviceNames = const {}}) async {
+    final profile = generateFor(account, usedDeviceNames: usedDeviceNames);
     await save(account, profile);
     return profile;
   }

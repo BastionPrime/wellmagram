@@ -43,7 +43,20 @@ class SpoofStoreBridge implements AccountSpoofStoreBridge {
   @override
   Future<bool> remove(AccountKey account) => store.remove(account);
 
-  /// Ready-made loader for SessionSpecBuilder.
-  Future<Map<String, dynamic>?> loadSessionData(AccountKey account) async =>
-      spoofProfileToSessionData(await store.load(account));
+  /// Creates and stores an account-specific profile for the account flow.
+  Future<SpoofProfile> createProfile(AccountKey account,
+          {Set<String> usedDeviceNames = const {}}) =>
+      store.regenerateFor(account, usedDeviceNames: usedDeviceNames);
+
+  /// Refreshes random identity fields while retaining the account's model/OS.
+  Future<SpoofProfile> regenerateProfile(AccountKey account,
+          {Set<String> usedDeviceNames = const {}}) =>
+      store.regenerate(account, usedDeviceNames: usedDeviceNames);
+
+  /// SessionSpecBuilder reads this on session start. A new account gets its
+  /// stable preset on first use; existing profiles are never overwritten.
+  Future<Map<String, dynamic>?> loadSessionData(AccountKey account) async {
+    final profile = await store.load(account) ?? await createProfile(account);
+    return spoofProfileToSessionData(profile);
+  }
 }

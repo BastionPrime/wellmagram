@@ -87,6 +87,16 @@ void main() {
     expect(() => presetIndexForAccountKey('k', -1), throwsArgumentError);
   });
 
+  test('two distinct account keys select different concrete presets', () {
+    const first = 'spoof_profile_max_1';
+    const second = 'spoof_profile_max_2';
+    final firstIndex = presetIndexForAccountKey(first, spoofDevicePresets.length);
+    final secondIndex = presetIndexForAccountKey(second, spoofDevicePresets.length);
+    expect(firstIndex, isNot(secondIndex));
+    expect(spoofDevicePresets[firstIndex].deviceName,
+        isNot(spoofDevicePresets[secondIndex].deviceName));
+  });
+
   test('distinct keys map to many distinct presets (spread)', () {
     final picked = <int>{};
     for (var id = 1; id <= 100; id++) {
