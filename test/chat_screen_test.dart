@@ -83,6 +83,19 @@ Future<void> _pumpChat(WidgetTester tester, FakeBackend backend, UnifiedChat cha
   await tester.pumpAndSettle();
 }
 
+/// Delivers a backend event and renders the resulting frame.
+///
+/// A broadcast stream delivers on a microtask, and `pump` flushes microtasks
+/// only after its frame, so the `setState` from the listener lands in the
+/// following frame: the event needs a second `pump`. Deliberately not
+/// `pumpAndSettle`, which would advance past [ChatScreen.typingTtl] and clear
+/// the typing indicator the test is asserting on.
+Future<void> _emit(WidgetTester tester, FakeBackend backend, BackendEvent event) async {
+  backend.controller.add(event);
+  await tester.pump();
+  await tester.pump();
+}
+
 void main() {
   for (final network in [Network.max, Network.telegram]) {
     testWidgets('chat sends and reads through $network backend', (tester) async {
@@ -97,8 +110,7 @@ void main() {
       expect(backend.sends, 1);
       // Own message renders optimistically from SendResult.
       expect(find.text('Hello'), findsOneWidget);
-      backend.controller.add(BackendEvent.message(account: account, chatId: 'chat', messageId: '1', senderId: 'friend', text: 'Reply', timestamp: 2));
-      await tester.pumpAndSettle();
+      await _emit(tester, backend, BackendEvent.message(account: account, chatId: 'chat', messageId: '1', senderId: 'friend', text: 'Reply', timestamp: 2));
       expect(find.text('Reply'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await backend.dispose();
@@ -110,15 +122,13 @@ void main() {
       final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
       await _pumpChat(tester, backend, chat);
       expect(find.byKey(const Key('typing-indicator')), findsNothing);
-      backend.controller.add(BackendEvent(
+      await _emit(tester, backend, BackendEvent(
         kind: BackendEventKind.typing, account: account, chatId: 'chat',
         senderId: 'friend', timestamp: 3));
-      await tester.pump();
       expect(find.byKey(const Key('typing-indicator')), findsOneWidget);
-      backend.controller.add(BackendEvent(
+      await _emit(tester, backend, BackendEvent(
         kind: BackendEventKind.typing, account: account, chatId: 'chat',
         senderId: 'friend', text: 'false', timestamp: 4));
-      await tester.pump();
       expect(find.byKey(const Key('typing-indicator')), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await backend.dispose();
@@ -140,6 +150,22 @@ void main() {
       await backend.dispose();
     });
   }
+
+  testWidgets('typing indicator expires after the TTL without new events', (tester) async {
+    final account = AccountKey(network: Network.max, id: 1);
+    final backend = FakeBackend(account, Capabilities.forNetwork(Network.max));
+    final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
+    await _pumpChat(tester, backend, chat);
+    await _emit(tester, backend, BackendEvent(
+      kind: BackendEventKind.typing, account: account, chatId: 'chat',
+      senderId: 'friend', timestamp: 3));
+    expect(find.byKey(const Key('typing-indicator')), findsOneWidget);
+    await tester.pump(ChatScreen.typingTtl + const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.byKey(const Key('typing-indicator')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await backend.dispose();
+  });
 
   testWidgets('composer hidden when sendText is false', (tester) async {
     final account = AccountKey(network: Network.max, id: 1);
