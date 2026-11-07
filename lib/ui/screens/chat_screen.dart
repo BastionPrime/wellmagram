@@ -7,11 +7,23 @@ import '../../core/models/unified/backend_event.dart';
 import '../../core/models/unified/unified_chat.dart';
 import '../widgets/message_bubble.dart';
 
+/// Unified conversation screen (OPE-2270 T-3.3).
+///
+/// Typing fallback: backends emit [BackendEventKind.typing] without a
+/// dedicated "stopped" frame, so the screen treats an event with
+/// `text == 'false'` as "stopped" AND clears a shown indicator after
+/// [typingTtl] without a new typing event for the same sender.
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.backend, required this.chat});
 
   final MessengerBackend backend;
   final UnifiedChat chat;
+
+  @visibleForTesting
+  static const typingTtl = Duration(seconds: 6);
+
+  @visibleForTesting
+  static const reactionChoices = ['👍', '❤️', '😂', '😮', '😢'];
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -22,6 +34,7 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<BackendEvent>? _subscription;
   List<UnifiedMessage> _messages = [];
   String? _typing;
+  Timer? _typingTimer;
   String? _error;
   bool _busy = false;
   bool _loading = true;
@@ -46,6 +59,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final generation = ++_generation;
     _messages = [];
     _typing = null;
+    _typingTimer?.cancel();
+    _typingTimer = null;
     _loading = true;
     _subscription = widget.backend.events.listen(_onEvent);
     _load(generation);
@@ -84,10 +99,27 @@ class _ChatScreenState extends State<ChatScreen> {
         case BackendEventKind.messageDeleted:
           _messages.removeWhere((m) => m.id == event.messageId);
         case BackendEventKind.typing:
-          _typing = event.text == 'false' ? null : (event.senderId ?? 'Typing');
+          _applyTyping(event);
         default:
           break;
       }
+    });
+  }
+
+  void _applyTyping(BackendEvent event) {
+    if (event.text == 'false') {
+      _typing = null;
+      _typingTimer?.cancel();
+      _typingTimer = null;
+      return;
+    }
+    _typing = event.senderId ?? 'Typing';
+    _typingTimer?.cancel();
+    final shown = _typing;
+    _typingTimer = Timer(ChatScreen.typingTtl, () {
+      if (!mounted) return;
+      // Clear only if no newer typing event replaced the indicator.
+      if (_typing == shown) setState(() { _typing = null; _typingTimer = null; });
     });
   }
 
@@ -103,8 +135,23 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _composer.text.trim();
     if (text.isEmpty || !widget.backend.capabilities.sendText) return;
     await _perform(() async {
-      await widget.backend.sendText(widget.chat.id, text);
-      if (mounted) _composer.clear();
+      final result = await widget.backend.sendText(widget.chat.id, text);
+      if (!mounted) return;
+      _composer.clear();
+      // Optimistic local echo from SendResult; backend echo dedupes by id.
+      if (!_messages.any((m) => m.id == result.messageId)) {
+        setState(() {
+          _messages.add(UnifiedMessage(
+            account: widget.chat.account,
+            chatId: widget.chat.id,
+            id: result.messageId,
+            senderId: widget.chat.account.storageId,
+            text: text,
+            timestamp: result.timestamp,
+          ));
+          _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        });
+      }
       if (widget.backend.capabilities.setTyping) await widget.backend.setTyping(widget.chat.id, false);
     });
   }
@@ -121,10 +168,21 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _react(UnifiedMessage message) async {
+    final reaction = await showDialog<String>(context: context, builder: (context) => SimpleDialog(
+      title: const Text('Choose reaction'),
+      children: [for (final emoji in ChatScreen.reactionChoices)
+        SimpleDialogOption(onPressed: () => Navigator.pop(context, emoji), child: Text(emoji, style: const TextStyle(fontSize: 24)))]));
+    if (reaction != null && widget.backend.capabilities.setReaction) {
+      await _perform(() => widget.backend.setReaction(widget.chat.id, message.id, reaction));
+    }
+  }
+
   @override
   void dispose() {
     ++_generation;
     _subscription?.cancel();
+    _typingTimer?.cancel();
     _composer.dispose();
     super.dispose();
   }
@@ -142,7 +200,7 @@ class _ChatScreenState extends State<ChatScreen> {
           return MessageBubble(message: message,
             onEdit: caps.editText && !_busy ? () => _edit(message) : null,
             onDelete: caps.deleteMessages && !_busy ? () => _perform(() => widget.backend.deleteMessages(widget.chat.id, [message.id])) : null,
-            onReact: caps.setReaction && !_busy ? () => _perform(() => widget.backend.setReaction(widget.chat.id, message.id, '👍')) : null);
+            onReact: caps.setReaction && !_busy ? () => _react(message) : null);
         })),
       if (_typing != null) Text('$_typing is typing', key: const Key('typing-indicator')),
       if (widget.backend.capabilities.sendText) Row(children: [

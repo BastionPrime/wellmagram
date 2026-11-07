@@ -20,6 +20,9 @@ class FakeBackend implements MessengerBackend {
   final messages = <UnifiedMessage>[];
   int reads = 0;
   int sends = 0;
+  int edits = 0;
+  int deletes = 0;
+  final reactions = <String>[];
   @override
   Stream<BackendEvent> get events => controller.stream;
   @override
@@ -33,18 +36,18 @@ class FakeBackend implements MessengerBackend {
   @override
   Future<SendResult> sendText(String chatId, String text) async {
     sends++;
-    return const SendResult(messageId: 'sent', timestamp: 1);
+    return SendResult(messageId: 'sent-$sends', timestamp: sends);
   }
   @override
   Future<void> markRead(String chatId) async { reads++; }
   @override
   Future<void> setTyping(String chatId, bool typing) async {}
   @override
-  Future<void> editText(String chatId, String messageId, String newText) async {}
+  Future<void> editText(String chatId, String messageId, String newText) async { edits++; }
   @override
-  Future<void> deleteMessages(String chatId, List<String> messageIds) async {}
+  Future<void> deleteMessages(String chatId, List<String> messageIds) async { deletes += messageIds.length; }
   @override
-  Future<void> setReaction(String chatId, String messageId, String reaction) async {}
+  Future<void> setReaction(String chatId, String messageId, String reaction) async { reactions.add(reaction); }
   @override
   Future<void> sendMedia(String chatId, String filePath) async {}
   @override
@@ -63,24 +66,106 @@ class FakeBackend implements MessengerBackend {
   Future<void> dispose() async { await controller.close(); }
 }
 
+const _noSend = Capabilities(
+  sendText: false, sendMedia: false, editText: true, deleteMessages: true,
+  setReaction: true, markRead: true, setTyping: true, downloadMedia: false,
+  calls: false, pushRegistration: false, ghostMode: false,
+);
+
+const _readOnly = Capabilities(
+  sendText: true, sendMedia: false, editText: false, deleteMessages: false,
+  setReaction: false, markRead: true, setTyping: true, downloadMedia: false,
+  calls: false, pushRegistration: false, ghostMode: false,
+);
+
+Future<void> _pumpChat(WidgetTester tester, FakeBackend backend, UnifiedChat chat) async {
+  await tester.pumpWidget(MaterialApp(home: ChatScreen(backend: backend, chat: chat)));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   for (final network in [Network.max, Network.telegram]) {
     testWidgets('chat sends and reads through $network backend', (tester) async {
       final account = AccountKey(network: network, id: 1);
       final backend = FakeBackend(account, Capabilities.forNetwork(network));
       final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
-      await tester.pumpWidget(MaterialApp(home: ChatScreen(backend: backend, chat: chat)));
-      await tester.pumpAndSettle();
+      await _pumpChat(tester, backend, chat);
       expect(backend.reads, 1);
       await tester.enterText(find.byType(TextField), 'Hello');
       await tester.tap(find.byTooltip('Send'));
       await tester.pumpAndSettle();
       expect(backend.sends, 1);
+      // Own message renders optimistically from SendResult.
+      expect(find.text('Hello'), findsOneWidget);
       backend.controller.add(BackendEvent.message(account: account, chatId: 'chat', messageId: '1', senderId: 'friend', text: 'Reply', timestamp: 2));
       await tester.pumpAndSettle();
       expect(find.text('Reply'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await backend.dispose();
     });
+
+    testWidgets('typing shows and stops through $network backend', (tester) async {
+      final account = AccountKey(network: network, id: 1);
+      final backend = FakeBackend(account, Capabilities.forNetwork(network));
+      final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
+      await _pumpChat(tester, backend, chat);
+      expect(find.byKey(const Key('typing-indicator')), findsNothing);
+      backend.controller.add(BackendEvent(
+        kind: BackendEventKind.typing, account: account, chatId: 'chat',
+        senderId: 'friend', timestamp: 3));
+      await tester.pump();
+      expect(find.byKey(const Key('typing-indicator')), findsOneWidget);
+      backend.controller.add(BackendEvent(
+        kind: BackendEventKind.typing, account: account, chatId: 'chat',
+        senderId: 'friend', text: 'false', timestamp: 4));
+      await tester.pump();
+      expect(find.byKey(const Key('typing-indicator')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await backend.dispose();
+    });
+
+    testWidgets('edit/delete/react gated by capabilities ($network)', (tester) async {
+      final account = AccountKey(network: network, id: 1);
+      final backend = FakeBackend(account, _readOnly);
+      backend.messages.add(UnifiedMessage(
+        account: account, chatId: 'chat', id: 'm1',
+        senderId: 'friend', text: 'Hi', timestamp: 1));
+      final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
+      await _pumpChat(tester, backend, chat);
+      expect(find.text('Hi'), findsOneWidget);
+      expect(find.byTooltip('Edit'), findsNothing);
+      expect(find.byTooltip('Delete'), findsNothing);
+      expect(find.byTooltip('React'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await backend.dispose();
+    });
   }
+
+  testWidgets('composer hidden when sendText is false', (tester) async {
+    final account = AccountKey(network: Network.max, id: 1);
+    final backend = FakeBackend(account, _noSend);
+    final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
+    await _pumpChat(tester, backend, chat);
+    expect(find.byTooltip('Send'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await backend.dispose();
+  });
+
+  testWidgets('react picker sends chosen emoji', (tester) async {
+    final account = AccountKey(network: Network.max, id: 1);
+    final backend = FakeBackend(account, Capabilities.max);
+    backend.messages.add(UnifiedMessage(
+      account: account, chatId: 'chat', id: 'm1',
+      senderId: 'friend', text: 'Hi', timestamp: 1));
+    final chat = UnifiedChat(account: account, id: 'chat', title: 'Conversation', isGroup: false, lastEventTime: 0);
+    await _pumpChat(tester, backend, chat);
+    await tester.tap(find.byTooltip('React'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('❤️'));
+    await tester.pumpAndSettle();
+    expect(backend.reactions, ['❤️']);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await backend.dispose();
+  });
 }
