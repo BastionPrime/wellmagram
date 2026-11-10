@@ -76,6 +76,10 @@ Widget host({
 }) =>
     MaterialApp(
       home: ChatListScreen(
+        // Keyed by source identity so pumping a new source builds a fresh
+        // screen that reads its initialData snapshot (StreamBuilder only
+        // applies initialData in initState, not on stream swap).
+        key: ValueKey<Object?>(source),
         aggregator: source,
         pinStore: pinStore ?? InMemoryChatListPinStore(),
         accounts: accounts,
@@ -249,7 +253,7 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Beta')).dy));
 
     await tester.drag(find.text('Alpha'), const Offset(200, 0));
-    await tester.pumpAndSettle();
+    await tester.pump();
     await tester.tap(find.byTooltip('Открепить'));
     await tester.pumpAndSettle();
     expect(find.text('Закреплённые'), findsNothing);
