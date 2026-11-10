@@ -12,6 +12,7 @@ import 'package:wellmagram/core/backends/capabilities.dart';
 import 'package:wellmagram/core/backends/messenger_backend.dart';
 import 'package:wellmagram/core/models/unified/backend_event.dart';
 import 'package:wellmagram/core/models/unified/unified_chat.dart';
+import 'package:wellmagram/main.dart';
 import 'package:wellmagram/ui/screens/chat_list_screen.dart';
 
 const maxAccount = AccountKey(network: Network.max, id: 7);
@@ -264,6 +265,62 @@ void main() {
     await tester.pumpWidget(host(source: _FixtureSource([])));
     expect(find.text('Нет чатов'), findsOneWidget);
     expect(find.byType(RefreshIndicator), findsOneWidget);
+  });
+
+  testWidgets('WellmagramApp default entry boots directly to ChatListScreen',
+      (tester) async {
+    await tester.pumpWidget(const WellmagramApp());
+    expect(find.byType(ChatListScreen), findsOneWidget);
+    expect(find.text('Чаты'), findsOneWidget);
+    expect(find.text('Нет чатов'), findsOneWidget);
+  });
+
+  testWidgets(
+      'WellmagramApp routes and navigates to ChatListScreen with aggregator data',
+      (tester) async {
+    final backend = _MockBackend(maxAccount);
+    final aggregator = ChatListAggregator([backend])..start();
+    addTearDown(aggregator.dispose);
+    addTearDown(backend.dispose);
+
+    aggregator.addChat(chat('c1', 'Support Chat', 100, unread: 3));
+
+    await tester.pumpWidget(WellmagramApp(
+      initialRoute: '/status',
+      chatListSource: aggregator,
+      accounts: const {
+        'max:7': AccountProfile(
+          key: maxAccount,
+          displayName: 'Work',
+          phone: '',
+          updatedAt: 1,
+        ),
+      },
+    ));
+
+    expect(find.byType(StatusScreen), findsOneWidget);
+    expect(find.text('К списку чатов'), findsOneWidget);
+
+    await tester.tap(find.text('К списку чатов'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatListScreen), findsOneWidget);
+    expect(find.text('Support Chat'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('MAX'), findsOneWidget);
+    expect(find.text('W'), findsOneWidget);
+
+    backend.emit(BackendEvent.message(
+      account: maxAccount,
+      chatId: 'c1',
+      messageId: 'm:2',
+      text: 'live update',
+      timestamp: 200,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('live update'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
   });
 }
 
