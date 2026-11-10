@@ -103,7 +103,8 @@ void main() {
         'max:7': AccountProfile(
           key: maxAccount,
           displayName: 'Work',
-          createdAtMs: 1,
+          phone: '',
+          updatedAt: 1,
         ),
       },
     ));
