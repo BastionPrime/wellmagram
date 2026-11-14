@@ -19,6 +19,12 @@ class Capabilities {
   final bool pushRegistration;
   final bool ghostMode;
 
+  /// Whether the network supports muting/unmuting individual chats.
+  final bool setChatMuted;
+
+  /// Whether the network supports archiving chats from the main chat list.
+  final bool archiveChat;
+
   const Capabilities({
     required this.sendText,
     required this.sendMedia,
@@ -31,6 +37,8 @@ class Capabilities {
     required this.calls,
     required this.pushRegistration,
     required this.ghostMode,
+    this.setChatMuted = false,
+    this.archiveChat = false,
   });
 
   /// MAX protocol (upstream Komet modules) supports all listed operations.
@@ -46,9 +54,12 @@ class Capabilities {
     calls: true,
     pushRegistration: true,
     ghostMode: true,
+    setChatMuted: true,
+    archiveChat: true,
   );
 
-  /// Telegram baseline (TDLib) for Phase 2; media/calls arrive later there.
+  /// Telegram baseline (TDLib) for Phase 2; media/calls/chat-list mutations
+  /// arrive later there.
   static const Capabilities telegram = Capabilities(
     sendText: true,
     sendMedia: false,
@@ -61,6 +72,8 @@ class Capabilities {
     calls: false,
     pushRegistration: false,
     ghostMode: true,
+    setChatMuted: false,
+    archiveChat: false,
   );
 
   static Capabilities forNetwork(Network network) => switch (network) {
