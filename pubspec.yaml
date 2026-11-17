@@ -8,6 +8,8 @@ environment:
   flutter: ^3.38.5
 
 dependencies:
+  flutter:
+    sdk: flutter
   # TDLib FFI adapter: utf8 <-> native char* helpers.
   ffi: ^2.1.0
   # @visibleForTesting seams in td_ffi_client.dart (was a transitive-only
