@@ -6,6 +6,7 @@ import 'package:wellmagram/core/app/connection_service_controller.dart';
 import 'package:wellmagram/core/app/session_manager.dart';
 import 'package:wellmagram/core/backends/max/max_api_seam.dart';
 import 'package:wellmagram/core/backends/max/max_backend.dart';
+import 'package:wellmagram/core/backends/messenger_backend.dart';
 import 'package:wellmagram/core/accounts/network.dart';
 import 'package:test/test.dart';
 
@@ -59,7 +60,7 @@ class FakeSessionHarness {
     },
   );
 
-  Future<MaxBackend> login(AccountKey account, String token) async {
+  Future<MessengerBackend> login(AccountKey account, String token) async {
     if (!secureStorage.data.containsKey('cred:${account.storageId}')) {
       await credentials.saveToken(account, token);
     }
