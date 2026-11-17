@@ -22,8 +22,22 @@ can_invite_users_by_link slipped through). They are captured before the
 strip and checked against the UNION of all constructor fields: a read of
 a name that exists in no constructor is a fabricated field name.
 
-Usage: python3 tools/td_schema_check.py [path-to-td_api.tl]
-Exit code 0 = all names verified; nonzero = mismatches found.
+Usage: python3 tools/td_schema_check.py [options] [path-to-td_api.tl]
+
+Options:
+  --report    human-readable per-file/constructor summary of the scan;
+              exit code is unchanged: 0 = all names verified, 1 = mismatches
+              (CI-usable gate as-is).
+  --quiet     suppress output when nothing mismatches (still prints
+              failures and exits 1 on mismatch). Useful in cron/CI logs.
+
+Fetch the schema first (any TDLib release whose wire format you target):
+  curl -sL -o /tmp/td_api.tl \
+    https://raw.githubusercontent.com/tdlib/td/master/td/generate/scheme/td_api.tl
+  python3 tools/td_schema_check.py --report /tmp/td_api.tl
+
+See tools/README.md for what is checked, how to run it, and what to do
+when it fails.
 """
 
 import re
@@ -209,8 +223,13 @@ def prod_index_keys(path: Path) -> list[str]:
     return [key for key in index_keys if _looks_like_field(key)]
 
 
-def main() -> int:
-    schema_path = Path(sys.argv[1] if len(sys.argv) > 1 else '/tmp/td_api.tl')
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    report = '--report' in args
+    quiet = '--quiet' in args
+    args = [a for a in args if a not in ('--report', '--quiet')]
+
+    schema_path = Path(args[0] if args else '/tmp/td_api.tl')
     schema = parse_schema(schema_path)
     all_fields: set[str] = set()
     for fields in schema.values():
@@ -231,11 +250,17 @@ def main() -> int:
     files = fixture_files + prod_files
 
     failures: list[str] = []
+    # per-file accounting for --report: checked pairs / index reads and
+    # failures, plus per-constructor verified-field counts.
+    per_file: dict[str, dict] = {}
     checked = 0
     for file in files:
         raw_text = file.read_text()
         has_marker = NEGATIVE_FIXTURE_MARKER in raw_text
         negative_keys = NEGATIVE_FIXTURE_KEYS.get(file.name, {}) if has_marker else {}
+        stats = per_file.setdefault(
+            file.name, {'checked': 0, 'index': 0, 'failures': 0, 'by_ctor': {}}
+        )
         for constructor, key in dart_string_keys(file):
             if constructor in LEGACY_CONSTRUCTORS:
                 continue
@@ -246,26 +271,60 @@ def main() -> int:
             fields = schema.get(constructor)
             if fields is None:
                 failures.append(f'{file.name}: unknown constructor {constructor}')
+                stats['failures'] += 1
                 continue
             if key not in fields:
                 failures.append(f'{file.name}: {constructor}.{key} not in schema')
+                stats['failures'] += 1
                 continue
             checked += 1
+            stats['checked'] += 1
+            stats['by_ctor'][constructor] = stats['by_ctor'].get(constructor, 0) + 1
         if file in prod_files:
             for key in prod_index_keys(file):
                 if key in all_fields:
                     checked += 1
+                    stats['index'] += 1
                 else:
-                    failures.append(f'{file.name}: index read {key} exists in no constructor')
+                    failures.append(
+                        f'{file.name}: index read {key} exists in no constructor'
+                    )
+                    stats['failures'] += 1
 
-    print(f'td_schema_check: {checked} field names verified against '
-          f'{schema_path.name} ({len(schema)} constructors)')
+    if report:
+        print('td_schema_check — report')
+        print(
+            f'schema: {schema_path.name} ({len(schema)} constructors, '
+            f'{len(all_fields)} distinct field names)'
+        )
+        print(
+            f'scanned files: {len(files)} '
+            f'({len(prod_files)} production, {len(files) - len(prod_files)} '
+            'test/mock)'
+        )
+        print()
+        for name, stats in per_file.items():
+            line = f'  {name}: {stats["checked"]} field names verified'
+            if stats['index']:
+                line += f' + {stats["index"]} index reads'
+            if stats['failures']:
+                line += f'  [FAIL: {stats["failures"]}]'
+            print(line)
+            for ctor, count in sorted(stats['by_ctor'].items()):
+                print(f'    {ctor}: {count} fields')
+        print()
+        print(f'total: {checked} field names verified')
+    elif not quiet:
+        print(f'td_schema_check: {checked} field names verified against '
+              f'{schema_path.name} ({len(schema)} constructors)')
+
     if failures:
         print('MISMATCHES:')
         for failure in failures:
             print(f'  - {failure}')
         return 1
-    print('OK: no mismatches')
+    if not quiet:
+        print('OK: no mismatches')
     return 0
 
 
