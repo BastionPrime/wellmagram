@@ -17,6 +17,8 @@ void main() {
     expect(c.calls, isTrue);
     expect(c.pushRegistration, isTrue);
     expect(c.ghostMode, isTrue);
+    expect(c.setChatMuted, isTrue);
+    expect(c.archiveChat, isTrue);
   });
 
   test('telegram baseline is text-first', () {
@@ -26,6 +28,27 @@ void main() {
     expect(c.calls, isFalse);
     expect(c.pushRegistration, isFalse);
     expect(c.ghostMode, isTrue);
+    // Chat-list mutations (T-3.2) are not in the Phase 2 TDLib baseline yet.
+    expect(c.setChatMuted, isFalse);
+    expect(c.archiveChat, isFalse);
+  });
+
+  test('chat-list action flags default to false', () {
+    const c = Capabilities(
+      sendText: true,
+      sendMedia: false,
+      editText: false,
+      deleteMessages: false,
+      setReaction: false,
+      markRead: true,
+      setTyping: false,
+      downloadMedia: false,
+      calls: false,
+      pushRegistration: false,
+      ghostMode: false,
+    );
+    expect(c.setChatMuted, isFalse);
+    expect(c.archiveChat, isFalse);
   });
 
   test('forNetwork maps networks to their presets', () {
